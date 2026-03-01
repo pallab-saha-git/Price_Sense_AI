@@ -1,0 +1,57 @@
+# logging.yaml — Structured logging configuration for Price Sense AI
+# Usage: configure in app startup or pass to logging.config.dictConfig()
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+  json:
+    "()": pythonjsonlogger.jsonlogger.JsonFormatter
+    format: "%(asctime)s %(name)s %(levelname)s %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout
+
+  rotating_file:
+    class: logging.handlers.RotatingFileHandler
+    level: WARNING
+    formatter: standard
+    filename: logs/pricesense.log
+    maxBytes: 10485760   # 10 MB
+    backupCount: 5
+    encoding: utf8
+
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: standard
+    filename: logs/errors.log
+    maxBytes: 5242880    # 5 MB
+    backupCount: 3
+    encoding: utf8
+
+loggers:
+  pricesense:
+    level: DEBUG
+    handlers: [console, rotating_file, error_file]
+    propagate: false
+
+  dash:
+    level: WARNING
+    handlers: [console]
+    propagate: false
+
+  werkzeug:
+    level: WARNING
+    handlers: [console]
+    propagate: false
+
+root:
+  level: WARNING
+  handlers: [console]

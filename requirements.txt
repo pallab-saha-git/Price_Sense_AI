@@ -1,0 +1,52 @@
+# ============================================================
+# SECTION 1: UI FRAMEWORK (Dash — full-stack Python app)
+# ============================================================
+dash==2.18.*
+dash-bootstrap-components==1.6.*
+dash-ag-grid==31.*
+plotly==5.24.*
+
+# ============================================================
+# SECTION 2: DATA & ML ENGINE
+# ============================================================
+pandas==2.2.*
+numpy==1.26.*
+statsmodels==0.14.*
+scikit-learn==1.5.*
+scipy==1.14.*
+prophet==1.1.*
+
+# Seasonality & calendar
+holidays==0.57.*
+pytrends==4.9.*
+requests==2.32.*
+
+# ============================================================
+# SECTION 3: DATABASE
+# ============================================================
+sqlalchemy==2.0.*
+alembic==1.13.*
+# psycopg2-binary==2.9.*    # Uncomment if switching to PostgreSQL
+
+# ============================================================
+# SECTION 4: AI INSIGHTS (OpenRouter)
+# ============================================================
+openai==1.50.*              # OpenRouter uses OpenAI-compatible API
+python-dotenv==1.0.*
+
+# ============================================================
+# SECTION 5: UTILITIES
+# ============================================================
+loguru==0.7.*
+faker==30.*
+
+# ============================================================
+# SECTION 6: PRODUCTION SERVER
+# ============================================================
+gunicorn==22.*              # WSGI server (Linux/macOS/Docker production)
+# waitress==3.*             # Uncomment for Windows production (WSGI, no Unix sockets)
+
+# ============================================================
+# SECTION 7: TESTING
+# ============================================================
+pytest==8.3.*

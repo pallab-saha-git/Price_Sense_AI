@@ -1,0 +1,73 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.tox/
+*.spec
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.local
+.env.production
+
+# ── Secrets — NEVER commit real credentials ───────────────────────────────────
+.env
+*.pem
+*.key
+*.p12
+
+# ── Database files & generated synthetic data ─────────────────────────────────
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/synthetic/
+logs/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Jupyter ────────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Coverage / test artefacts ─────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+*.lcov
+
+# ── Distribution ──────────────────────────────────────────────────────────────
+*.tar.gz
+*.zip
+*.whl
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.dockerignore  # keep, but noting it is tracked
+
+# ── ML model artefacts (can be large) ────────────────────────────────────────
+models/saved/
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
