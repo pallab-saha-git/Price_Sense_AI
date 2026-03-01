@@ -26,6 +26,9 @@ ENV/
 *.key
 *.p12
 
+# ── Docker override (contains real credentials) ───────────────────────────────
+docker-compose.override.yml
+
 # ── Database files & generated synthetic data ─────────────────────────────────
 data/*.db
 data/*.sqlite

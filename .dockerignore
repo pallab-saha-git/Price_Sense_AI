@@ -1,8 +1,52 @@
+# ── Virtual envs & cache ──────────────────────────────────────────────────────
 venv/
 .venv/
+env/
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# ── Git ───────────────────────────────────────────────────────────────────────
 .git/
+.gitignore
+
+# ── SECRETS — never bake credentials into the image ─────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Database & generated data — volume-mounted at runtime ────────────────────
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/synthetic/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Dev / test artefacts ─────────────────────────────────────────────────────
+tests/
+*.ipynb
 *.ipynb_checkpoints/
-data/raw/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ── Docker infrastructure files (not needed inside the container) ─────────────
+docker-compose*.yml
+Dockerfile
+
+# ── Docs & outline ───────────────────────────────────────────────────────────
+README.md
+PRICE_SENSE_AI_PROJECT_OUTLINE.md
+logging.yaml

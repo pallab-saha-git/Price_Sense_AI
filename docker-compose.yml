@@ -3,14 +3,37 @@ version: '3.9'
 services:
   pricesense:
     build: .
+    image: pricesense-ai:latest
     ports:
-      - "8050:8050"
+      - "${PORT:-8050}:8050"
     volumes:
+      # Database & synthetic data persist across container restarts.
+      # The host directory is created automatically if it does not exist.
       - ./data:/app/data
+      # Optional: persist logs
+      - ./logs:/app/logs
     environment:
-      - DATABASE_URL=sqlite:///./data/pricesense.db
-      - DEBUG=false
-      - HOST=0.0.0.0
-    env_file:
-      - .env
+      # ── Safe defaults — override with a .env file or -e flags ───────────────
+      DATABASE_URL: sqlite:///./data/pricesense.db
+      DEBUG: "false"
+      HOST: "0.0.0.0"
+      PORT: "8050"
+      # ── Set these to real values before running ──────────────────────────────
+      # Never hard-code credentials here. Supply them via one of:
+      #   a) A local .env file (gitignored):  docker compose --env-file .env up
+      #   b) Shell environment:               ADMIN_PASSWORD=xxx docker compose up
+      #   c) docker-compose.override.yml      (see docker-compose.override.yml.example)
+      #   d) Platform secrets (Render/Fly/Railway env-vars dashboard)
+      SECRET_KEY:         ${SECRET_KEY:-change-me-generate-with-secrets.token_hex-32}
+      ADMIN_USERNAME:     ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD:     ${ADMIN_PASSWORD:-}
+      OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
+      OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-meta-llama/llama-3.3-70b-instruct:free}
+      REGISTRATION_DISABLED: ${REGISTRATION_DISABLED:-false}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

@@ -111,24 +111,57 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 def seed_admin_user() -> None:
     """
-    Create the initial admin user from ADMIN_USERNAME / ADMIN_PASSWORD env vars.
-    Safe to call on every startup — skips if already exists or vars are unset.
+    Ensure at least one admin account exists.
+
+    Priority order:
+      1. If ADMIN_USERNAME + ADMIN_PASSWORD are set → create/keep that account.
+      2. If NO env vars are set AND no users exist → auto-generate a random
+         password for user 'admin', create the account, and print the
+         credentials prominently to stdout so Docker / CI users can retrieve
+         them with:  docker logs <container> | grep 'FIRST-RUN'
+    Safe to call on every startup.
     """
+    import secrets as _secrets
     from config.settings import ADMIN_USERNAME, ADMIN_PASSWORD
-    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
-        return
 
+    username = ADMIN_USERNAME or "admin"
+    password = ADMIN_PASSWORD
+
+    # ── Check whether any users exist at all ──────────────────────────────────
     with SessionLocal() as db:
-        if db.query(User).filter(User.username == ADMIN_USERNAME).first():
-            return  # already exists
+        total_users = db.query(User).count()
+        already_exists = db.query(User).filter(User.username == username).first() is not None
 
-    ok, msg = create_user(
-        username=ADMIN_USERNAME,
-        password=ADMIN_PASSWORD,
-        role="admin",
-    )
+    if already_exists:
+        return  # nothing to do
+
+    # ── If no password configured and no users exist → auto-generate ──────────
+    if not password:
+        if total_users > 0:
+            # Other users exist; no need to seed an admin automatically.
+            return
+        # First-run with no env vars — generate a secure temporary password.
+        password = _secrets.token_urlsafe(16)
+        banner = (
+            "\n"
+            "╔══════════════════════════════════════════════════════════════╗\n"
+            "║          PRICE SENSE AI — FIRST-RUN CREDENTIALS             ║\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+           f"║  Username : {username:<49}║\n"
+           f"║  Password : {password:<49}║\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+            "║  Change this via ADMIN_USERNAME / ADMIN_PASSWORD in .env    ║\n"
+            "║  or set them as Docker / platform environment variables.     ║\n"
+            "╚══════════════════════════════════════════════════════════════╝\n"
+        )
+        # Use print() so it always appears in Docker logs, even if loguru is
+        # configured to filter INFO.  Tag with FIRST-RUN for easy grepping.
+        print(f"[FIRST-RUN] {banner}", flush=True)
+        logger.warning(f"FIRST-RUN: auto-created admin '{username}'. Check logs for password.")
+
+    ok, msg = create_user(username=username, password=password, role="admin")
     if ok:
-        logger.success(f"Admin user '{ADMIN_USERNAME}' created.")
+        logger.success(f"Admin user '{username}' created.")
     else:
         logger.warning(f"Admin seed skipped: {msg}")
 

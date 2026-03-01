@@ -1,0 +1,52 @@
+# docker-compose.override.yml.example
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW TO USE (credential sharing without committing secrets)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This override file lets you inject private credentials into docker-compose
+# without touching docker-compose.yml (which is committed to git).
+#
+# Steps:
+#   1. Copy this file:
+#        Windows:  copy docker-compose.override.yml.example docker-compose.override.yml
+#        Linux:    cp  docker-compose.override.yml.example docker-compose.override.yml
+#
+#   2. Fill in your real values below.
+#
+#   3. Run as normal — Docker Compose automatically merges override files:
+#        docker compose up --build
+#
+# !! docker-compose.override.yml is listed in .gitignore — it will NEVER be
+#    committed to git or included in the Docker image.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARING THE CONTAINER WITH COLLEAGUES
+# ─────────────────────────────────────────────────────────────────────────────
+# Send them this example file privately (Slack DM, encrypted email, 1Password, etc.)
+# They fill in the values themselves before running.
+# The Docker image on Docker Hub / GitHub Container Registry contains NO secrets.
+#
+# Alternative — pass via shell (no file at all):
+#   SECRET_KEY=xxx ADMIN_USERNAME=alice ADMIN_PASSWORD=hunter2 docker compose up
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: '3.9'
+
+services:
+  pricesense:
+    environment:
+      # Generate SECRET_KEY:  python -c "import secrets; print(secrets.token_hex(32))"
+      SECRET_KEY: "REPLACE_WITH_YOUR_SECRET_KEY"
+
+      # First admin account — created automatically on first startup
+      ADMIN_USERNAME: "REPLACE_WITH_YOUR_USERNAME"
+      ADMIN_PASSWORD: "REPLACE_WITH_STRONG_PASSWORD"
+
+      # OpenRouter key — get free at https://openrouter.ai
+      OPEN_ROUTER_API_KEY: "REPLACE_WITH_SK_OR_KEY"
+
+      # Optional overrides
+      # OPENROUTER_MODEL: "meta-llama/llama-3.3-70b-instruct:free"
+      # REGISTRATION_DISABLED: "true"
+      # DEBUG: "false"
