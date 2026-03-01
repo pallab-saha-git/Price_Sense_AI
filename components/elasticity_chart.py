@@ -66,7 +66,7 @@ def elasticity_chart(result: "ElasticityResult", regular_price: float, baseline_
     )
 
     fig.update_layout(
-        title=dict(text="📈 Price–Demand Elasticity Curve", font=dict(size=14)),
+        title=dict(text="Price-Demand Elasticity Curve", font=dict(size=13)),
         xaxis_title="Price ($)",
         yaxis_title="Projected Weekly Units",
         template=CHART_TEMPLATE,
@@ -85,6 +85,12 @@ def scenario_bar_chart(scenarios_df: pd.DataFrame) -> dcc.Graph:
     Highlights the optimal scenario in green.
     """
     df = scenarios_df.copy()
+
+    if df.empty or "Discount" not in df.columns:
+        fig = go.Figure()
+        fig.update_layout(title="No scenario data available", template=CHART_TEMPLATE, height=320)
+        return dcc.Graph(figure=fig, config={"displayModeBar": False})
+
     colors = []
     for _, row in df.iterrows():
         if row.get("Optimal?", "") and "Best" in str(row.get("Optimal?", "")):
@@ -104,7 +110,7 @@ def scenario_bar_chart(scenarios_df: pd.DataFrame) -> dcc.Graph:
     ))
 
     fig.update_layout(
-        title=dict(text="📊 Net Incremental Profit by Discount Level", font=dict(size=14)),
+        title=dict(text="Net Incremental Profit by Discount Level", font=dict(size=13)),
         xaxis_title="Discount Level",
         yaxis_title="Net Incremental Profit ($)",
         template=CHART_TEMPLATE,

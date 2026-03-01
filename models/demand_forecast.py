@@ -26,6 +26,24 @@ from loguru import logger
 
 warnings.filterwarnings("ignore")  # suppress Prophet stan warnings
 
+# ── Prophet availability probe ─────────────────────────────────────────────────
+# Checked once at import time.  Sets HAS_PROPHET=False if Prophet is installed
+# but its Stan backend is broken (e.g. missing stan_backend attribute after an
+# incomplete cmdstanpy/pystan install in Docker).
+try:
+    from prophet import Prophet as _Prophet  # noqa: F401
+    # Quick functional probe: instantiate the model without fitting.
+    # This will raise AttributeError if the Stan backend is missing.
+    _probe = _Prophet()
+    del _probe
+    HAS_PROPHET: bool = True
+except Exception as _prophet_err:
+    HAS_PROPHET = False
+    logger.warning(
+        f"Prophet unavailable — using moving-average baseline instead. "
+        f"({type(_prophet_err).__name__}: {_prophet_err})"
+    )
+
 
 @dataclass
 class ForecastResult:
@@ -75,13 +93,6 @@ def forecast_baseline(
     calendar_df      : Optional calendar events for holiday effects
     aggregate_stores : If True, aggregate all stores; if False, keep store-level
     """
-    try:
-        from prophet import Prophet
-        HAS_PROPHET = True
-    except ImportError:
-        HAS_PROPHET = False
-        logger.warning("Prophet not installed — using simple moving average baseline")
-
     sku_data = sales_df[sales_df["sku_id"] == sku_id].copy()
     sku_data["date"] = pd.to_datetime(sku_data["date"])
 
@@ -115,6 +126,8 @@ def forecast_baseline(
     if not HAS_PROPHET:
         return _fallback_forecast(sku_id, baseline_weekly, periods, weekly)
 
+    from prophet import Prophet  # already verified importable at module load
+
     # Build seasonality index from actual data
     weekly_temp = weekly.copy()
     weekly_temp["woy"] = weekly_temp["ds"].dt.isocalendar().week
@@ -123,33 +136,28 @@ def forecast_baseline(
     ).to_dict()
     seas_idx = {int(k): round(float(v), 3) for k, v in seas_idx.items()}
 
-    # Train Prophet
-    holidays_df = _build_prophet_holidays(calendar_df)
-    model = Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        holidays=holidays_df,
-        seasonality_mode="multiplicative",
-        changepoint_prior_scale=0.15,
-        interval_width=0.80,
-    )
-
+    # Train Prophet — wrap the entire block so any Prophet/Stan version
+    # incompatibility (e.g. 'stan_backend' AttributeError) falls back cleanly.
     try:
+        holidays_df = _build_prophet_holidays(calendar_df)
+        model = Prophet(
+            yearly_seasonality=True,
+            weekly_seasonality=False,
+            daily_seasonality=False,
+            holidays=holidays_df,
+            seasonality_mode="multiplicative",
+            changepoint_prior_scale=0.15,
+            interval_width=0.80,
+        )
         model.fit(train)
-    except Exception as exc:
-        logger.error(f"Prophet fit failed for {sku_id}: {exc}")
-        return _fallback_forecast(sku_id, baseline_weekly, periods, weekly)
 
-    # Forecast
-    future = model.make_future_dataframe(periods=len(holdout) + periods, freq="W")
-    try:
+        # Forecast
+        future   = model.make_future_dataframe(periods=len(holdout) + periods, freq="W")
         forecast = model.predict(future)
+        forecast["yhat"] = forecast["yhat"].clip(lower=0)
     except Exception as exc:
-        logger.error(f"Prophet predict failed for {sku_id}: {exc}")
+        logger.debug(f"Prophet fit failed for {sku_id} ({exc!r}) — falling back to MA")
         return _fallback_forecast(sku_id, baseline_weekly, periods, weekly)
-
-    forecast["yhat"] = forecast["yhat"].clip(lower=0)
 
     # MAPE on holdout
     holdout_pred = forecast[forecast["ds"].isin(holdout["ds"])]

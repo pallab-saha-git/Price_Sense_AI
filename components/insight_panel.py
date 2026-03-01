@@ -10,7 +10,7 @@ import dash_bootstrap_components as dbc
 from dash import html
 
 
-def insight_panel(insights: list[str], title: str = "💡 AI Insights") -> dbc.Card:
+def insight_panel(insights: list[str], title: str = "AI Insights") -> dbc.Card:
     """
     Render a list of markdown insight strings as styled alert panels.
     Supports markdown bold via **text** → <strong>text</strong> conversion.
@@ -49,8 +49,8 @@ def insight_panel(insights: list[str], title: str = "💡 AI Insights") -> dbc.C
 
     return dbc.Card(
         [
-            dbc.CardHeader(html.H6(title, className="mb-0 text-white"),
-                           style={"background": "#1a1a2e"}),
+            dbc.CardHeader(html.H6(title, className="mb-0"),
+                           style={"background": "#1e293b", "color": "#f1f5f9"}),
             dbc.CardBody(children, className="p-2"),
         ],
         className="shadow-sm",
@@ -82,8 +82,8 @@ def scenario_insight_panel(comparison) -> dbc.Card:
 
     return dbc.Card(
         [
-            dbc.CardHeader(html.H6("💡 Scenario Insight", className="mb-0 text-white"),
-                           style={"background": "#1a1a2e"}),
+            dbc.CardHeader(html.H6("Scenario Insight", className="mb-0"),
+                           style={"background": "#1e293b", "color": "#f1f5f9"}),
             dbc.CardBody(children, className="p-2"),
         ],
         className="shadow-sm mb-3",

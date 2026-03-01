@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
 import flask
 import dash
 import dash_bootstrap_components as dbc
-from dash import Dash, Input, Output, State, dcc, html
+from dash import Dash, Input, Output, State, dcc, html, no_update
 from loguru import logger
 
 from config.settings import (
@@ -39,7 +39,7 @@ logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
 logging.getLogger("prophet").setLevel(logging.WARNING)
 
 # ── Bootstrap database / synthetic data if needed ─────────────────────────────
-logger.info("🗄  Booting database …")
+logger.info("Booting database ...")
 try:
     from data.seed_data import seed_database
     seed_database(force=False)
@@ -55,7 +55,7 @@ except Exception as exc:
     logger.warning(f"Admin seed skipped: {exc}")
 
 # ── Pre-warm the in-memory data cache ─────────────────────────────────────────
-logger.info("⚡ Pre-warming data cache …")
+logger.info("Pre-warming data cache ...")
 try:
     from services.promo_analyzer import _load_data
     _load_data()
@@ -112,10 +112,11 @@ def logout():
 
 # ── Navigation bar ─────────────────────────────────────────────────────────────
 NAV_LINKS = [
-    ("/",        "🏠 Dashboard"),
-    ("/analyze", "🔍 Analyze"),
-    ("/compare", "⚖️  Compare"),
-    ("/catalog", "📦 Catalog"),
+    ("/",                    "Dashboard"),
+    ("/analyze",             "Analyze"),
+    ("/compare",             "Compare"),
+    ("/catalog",             "Catalog"),
+    ("/profit-opportunities", "Profit Buckets"),
 ]
 
 navbar = dbc.Navbar(
@@ -123,12 +124,12 @@ navbar = dbc.Navbar(
         [
             dbc.NavbarBrand(
                 [
-                    html.Span("💡 Price", style={"color": "#0d6efd", "fontWeight": 900}),
-                    html.Span(" Sense ", style={"color": "#ffffff", "fontWeight": 700}),
-                    html.Span("AI",     style={"color": "#ffc107", "fontWeight": 900}),
+                    html.Span("Price", style={"color": "#60a5fa", "fontWeight": 700}),
+                    html.Span(" Sense ", style={"color": "#ffffff", "fontWeight": 400}),
+                    html.Span("AI",     style={"color": "#fbbf24", "fontWeight": 700}),
                 ],
                 href="/",
-                className="me-4 fs-4",
+                className="me-4 fs-5",
             ),
             dbc.NavbarToggler(id="navbar-toggler", n_clicks=0),
             dbc.Collapse(
@@ -142,8 +143,12 @@ navbar = dbc.Navbar(
                         dbc.NavItem(
                             html.Span(id="nav-user-badge", className="navbar-text text-light px-2 small"),
                         ),
-                        dbc.NavLink("🚪 Logout", href="/logout",
-                                    className="px-3 fw-semibold text-warning"),
+                        # Plain <a> so the browser always issues a full GET /logout to Flask
+                        html.A(
+                            "Logout",
+                            href="/logout",
+                            className="nav-link px-3 fw-semibold text-warning",
+                        ),
                     ],
                     navbar=True,
                     className="ms-auto align-items-center",
@@ -157,7 +162,7 @@ navbar = dbc.Navbar(
     color="dark",
     dark=True,
     sticky="top",
-    className="mb-0 shadow",
+    className="mb-0 shadow-sm",
 )
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
@@ -175,6 +180,9 @@ footer = html.Footer(
 # ── App layout ─────────────────────────────────────────────────────────────────
 app.layout = html.Div(
     [
+        # Auth guard — fires on every client-side URL change and forces a full
+        # page reload to /login when the Flask session has no authenticated user.
+        dcc.Location(id="_url-auth-guard", refresh=True),
         navbar,
         dbc.Container(
             dash.page_container,
@@ -187,6 +195,26 @@ app.layout = html.Div(
     ]
 )
 
+# ── Client-side auth guard ────────────────────────────────────────────────────
+# Dash uses HTML5 client-side routing so clicking nav links never hits Flask's
+# before_request.  This callback re-checks session on every URL change and
+# forces a full page reload to /login when the session is unauthenticated.
+_PUBLIC_DASH_PATHS = {"/login", "/register", "/logout"}
+
+@app.callback(
+    Output("_url-auth-guard", "href"),
+    Input("_url-auth-guard",  "pathname"),
+)
+def enforce_auth(pathname):
+    if not pathname:
+        return no_update
+    # Dash internals and public pages pass through
+    if pathname in _PUBLIC_DASH_PATHS or pathname.startswith(("/_", "/assets", "/favicon")):
+        return no_update
+    if flask.session.get("user"):
+        return no_update
+    return "/login"
+
 # ── Show current user in navbar ────────────────────────────────────────────────
 @app.callback(
     Output("nav-user-badge", "children"),
@@ -196,7 +224,7 @@ def update_nav_user(_):
     from auth.auth_callbacks import get_session_user
     user = get_session_user()
     if user:
-        return f"👤 {user['username']} ({user['role']})"
+        return f"{user['username']}  ·  {user['role']}"
     return ""
 
 # ── Navbar collapse toggle (mobile) ───────────────────────────────────────────
@@ -210,18 +238,19 @@ def toggle_navbar(n, is_open):
     return not is_open
 
 # ── Register page-level callbacks ──────────────────────────────────────────────
-from callbacks import analyze_callbacks, scenario_callbacks, catalog_callbacks
+from callbacks import analyze_callbacks, scenario_callbacks, catalog_callbacks, profit_buckets_callbacks
 from auth     import auth_callbacks
 
 analyze_callbacks.register(app)
 scenario_callbacks.register(app)
 catalog_callbacks.register(app)
+profit_buckets_callbacks.register(app)
 auth_callbacks.register(app)
 
 logger.success("All callbacks registered.")
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    logger.info(f"🚀 Starting Price Sense AI at http://{HOST}:{PORT}")
+    logger.info(f"Starting Price Sense AI at http://{HOST}:{PORT}")
     app.run(host=HOST, port=PORT, debug=DEBUG)
 

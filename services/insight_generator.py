@@ -32,50 +32,50 @@ if TYPE_CHECKING:
 
 TEMPLATES = {
     "RECOMMENDED_no_cannibal": (
-        "✅ This promotion is projected to generate **${inc_profit:,.0f}** in incremental profit "
+        "This promotion is projected to generate **${inc_profit:,.0f}** in incremental profit "
         "with a **{roi:.1f}x ROI**. Volume lift of **+{lift_pct:.0f}%** (+{lift_units:,.0f} units) "
-        "is well-supported by historical elasticity data. No material cannibalization detected "
+        "is supported by historical elasticity data. No material cannibalization detected "
         "from related SKUs. Risk is rated **{risk_band}**."
     ),
     "RECOMMENDED_with_cannibal": (
-        "✅ This promotion is projected to generate **${inc_profit:,.0f}** in net incremental profit "
+        "This promotion is projected to generate **${inc_profit:,.0f}** in net incremental profit "
         "after accounting for cannibalization. Volume lift of **+{lift_pct:.0f}%** is strong, "
         "but note that {cannibal_product} is projected to lose **${cannibal_cost:,.0f}** in margin "
         "({cannibal_pct:.0f}% volume depression). Net ROI remains positive at **{roi:.1f}x**."
     ),
     "MARGINAL": (
-        "⚠️ This promotion is marginally profitable at **${inc_profit:,.0f}** net incremental profit. "
+        "This promotion is marginally profitable at **${inc_profit:,.0f}** net incremental profit. "
         "The volume lift ({lift_pct:.0f}%) is partially offset by cannibalization costs "
         "(**${cannibal_cost:,.0f}**). Consider running this as a shorter promotion or pairing "
         "it with a vendor-funded deal to improve margin. Risk: **{risk_band}**."
     ),
     "NOT_RECOMMENDED_margin": (
-        "❌ This promotion is projected to lose **${loss:,.0f}** in margin after discount erosion "
+        "This promotion is projected to lose **${loss:,.0f}** in margin after discount erosion "
         "and cannibalization. The {discount_pct:.0f}% discount is deeper than the margin improvement "
         "from the volume lift ({lift_pct:.0f}%). "
-        "💡 At **{alt_disc:.0f}% off**, the estimated net profit is **${alt_profit:,.0f}** — "
+        "At **{alt_disc:.0f}% off**, the estimated net profit is **${alt_profit:,.0f}** — "
         "consider this as a more sustainable alternative."
     ),
     "NOT_RECOMMENDED_no_alt": (
-        "❌ This promotion is projected to generate a net loss of **${loss:,.0f}**. "
+        "This promotion is projected to generate a net loss of **${loss:,.0f}**. "
         "The primary driver is heavy margin erosion ({discount_pct:.0f}% discount) combined with "
         "cannibalization costs of **${cannibal_cost:,.0f}**. "
         "Consider a lower discount depth or a vendor-funded deal to make this viable."
     ),
     "high_cannibalization_warning": (
-        "⚠️ **Cannibalization alert:** Promoting {product} at {discount_pct:.0f}% off is "
+        "Cannibalization alert: Promoting {product} at {discount_pct:.0f}% off is "
         "projected to pull **{cannibal_pct:.0f}%** of {cannibal_product} sales. If both "
         "products are planned for the same promo window, consider staggering them by 2+ weeks."
     ),
     "seasonal_boost": (
-        "📅 **Seasonal note:** This promotion falls during a high-demand period "
+        "Seasonal note: This promotion falls during a high-demand period "
         "(×{seas_mult:.1f}× baseline). The elevated natural demand means both the volume "
         "opportunity and the risk of stockout are higher than a normal week. "
         "Ensure sufficient inventory before running."
     ),
     "low_elasticity_warning": (
-        "📊 **Elasticity note:** {product} has low price sensitivity (elasticity: {elasticity:.2f}). "
-        "Discounts will drive less volume lift than typical. Consider a 'feature + display' "
+        "Elasticity note: {product} has low price sensitivity (elasticity: {elasticity:.2f}). "
+        "Discounts will drive less volume lift than typical. Consider a feature + display "
         "promotion over pure price reduction to maintain margin while driving visibility."
     ),
 }

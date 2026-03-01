@@ -40,7 +40,7 @@ preload_app          = True     # load app before forking (memory sharing on Lin
 
 # ── Hooks ──────────────────────────────────────────────────────────────────────
 def on_starting(server):
-    server.log.info("🚀 Gunicorn starting — Price Sense AI")
+    server.log.info("Gunicorn starting — Price Sense AI")
 
 def worker_exit(server, worker):
     server.log.info(f"Worker {worker.pid} exiting.")

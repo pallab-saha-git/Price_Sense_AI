@@ -16,6 +16,25 @@ from loguru import logger
 
 def register(app):
 
+    # ── Populate category filter dynamically ──────────────────────────────────
+    @app.callback(
+        Output("dd-cat-filter", "options"),
+        Input("dd-cat-filter",  "id"),
+    )
+    def populate_catalog_categories(_):
+        from services.promo_analyzer import _load_data
+        try:
+            data = _load_data()
+            cats = sorted(data["products"]["category"].dropna().unique())
+
+            opts = [{"label": "All Categories", "value": "ALL"}]
+            for c in cats:
+                opts.append({"label": c, "value": c})
+            return opts
+        except Exception as exc:
+            logger.error(f"populate_catalog_categories error: {exc}")
+            return [{"label": "All", "value": "ALL"}]
+
     # ── Product grid ──────────────────────────────────────────────────────────
     @app.callback(
         Output("div-catalog-grid",    "children"),
@@ -61,19 +80,30 @@ def register(app):
             return dbc.Alert(str(exc), color="danger"), html.Div()
 
 
+_CAT_COLORS = {
+    "Nuts": "primary", "Beverages": "info", "Snacks": "warning",
+    "Grocery": "secondary", "Dairy": "success", "Produce": "success",
+    "Bakery": "danger",
+}
+
+
+
 def _product_cards(df: pd.DataFrame) -> html.Div:
     if df.empty:
         return html.P("No products found.", className="text-muted")
 
     cards = []
     for _, row in df.iterrows():
-        margin = row.get("margin_pct", 0)
+        cat    = row.get("category", "")
+        color  = _CAT_COLORS.get(cat, "secondary")
+        rp     = float(row.get("regular_price", 0))
+        cp     = float(row.get("cost_price",    0))
+        margin = round((rp - cp) / rp * 100, 1) if rp > 0 else 0.0
         card = dbc.Col(
             dbc.Card(
                 [
                     dbc.CardHeader(
-                        html.Span(row["category"],
-                                  className="badge bg-primary" if row["category"] == "Nuts" else "badge bg-info"),
+                        html.Span(cat, className=f"badge bg-{color}"),
                     ),
                     dbc.CardBody(
                         [
@@ -82,9 +112,9 @@ def _product_cards(df: pd.DataFrame) -> html.Div:
                             html.Hr(className="my-1"),
                             dbc.Row([
                                 dbc.Col([html.Small("Price", className="text-muted d-block"),
-                                         html.Strong(f"${row['regular_price']:.2f}")], width=6),
-                                dbc.Col([html.Small("Margin", className="text-muted d-block"),
-                                         html.Strong(f"{margin:.1f}%")], width=6),
+                                         html.Strong(f"${rp:.2f}")], width=6),
+                                dbc.Col([html.Small("Gross Margin", className="text-muted d-block"),
+                                         html.Strong(f"{margin:.0f}%")], width=6),
                             ]),
                             html.Small(
                                 "🗓 Seasonal" if row.get("is_seasonal") else "",

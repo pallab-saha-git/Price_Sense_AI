@@ -24,7 +24,7 @@ def layout() -> html.Div:
             dcc.Store(id="store-stores-data"),         # stores DataFrame as JSON
 
             dbc.Row(
-                dbc.Col(html.H3("⚡ Promotion Analyzer", className="fw-bold mt-3 mb-0"))
+                dbc.Col(html.H3("Promotion Analyzer", className="fw-bold mt-3 mb-0"))
             ),
             html.Hr(),
 

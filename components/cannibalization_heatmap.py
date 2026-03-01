@@ -68,7 +68,7 @@ def cannibalization_heatmap(cross_matrix: pd.DataFrame) -> dcc.Graph:
     ))
 
     fig.update_layout(
-        title=dict(text="🔄 Cannibalization Matrix (Cross-Elasticity)", font=dict(size=14)),
+        title=dict(text="Cannibalization Matrix (Cross-Elasticity)", font=dict(size=13)),
         xaxis_title="Affected SKU (volume response)",
         yaxis_title="Focal SKU (price change)",
         template="plotly_white",

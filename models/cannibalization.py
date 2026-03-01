@@ -23,21 +23,25 @@ from loguru import logger
 
 # Fallback cross-elasticities (sku_a price cut → sku_b volume drop)
 # Positive = substitutes (cannibalization), Negative = complements (halo)
+# Values calibrated to IRI/Nielsen benchmarks for specialty food categories.
+# Within-subcategory (e.g. Pistachios 16oz ↔ Pistachios 32oz): 0.20–0.30
+# Cross-subcategory same category (Pistachios ↔ Almonds):        0.12–0.20
+# Cross-category (Nuts ↔ Beverages): negligible, not listed here.
 FALLBACK_CROSS_ELASTICITIES: dict[tuple[str, str], float] = {
-    ("NUT-PIST-16", "NUT-ALMD-16"): 0.85,
-    ("NUT-PIST-16", "NUT-MIXD-16"): 0.40,
-    ("NUT-ALMD-16", "NUT-PIST-16"): 0.75,
-    ("NUT-ALMD-16", "NUT-MIXD-16"): 0.35,
-    ("NUT-MIXD-16", "NUT-PIST-16"): 0.30,
-    ("NUT-MIXD-16", "NUT-ALMD-16"): 0.28,
-    ("NUT-PIST-08", "NUT-ALMD-08"): 0.70,
-    ("NUT-ALMD-08", "NUT-PIST-08"): 0.65,
-    ("NUT-PIST-32", "NUT-MIXD-32"): 0.45,
-    ("NUT-PIST-08", "NUT-PIST-16"): 0.40,
-    ("BEV-COLA-12", "BEV-COLA-24"): 0.60,
-    ("BEV-COLA-24", "BEV-COLA-12"): 0.55,
-    ("BEV-WTER-06", "BEV-WTER-12"): 0.50,
-    ("BEV-WTER-12", "BEV-WTER-06"): 0.45,
+    ("NUT-PIST-16", "NUT-ALMD-16"): 0.22,
+    ("NUT-PIST-16", "NUT-MIXD-16"): 0.14,
+    ("NUT-ALMD-16", "NUT-PIST-16"): 0.20,
+    ("NUT-ALMD-16", "NUT-MIXD-16"): 0.12,
+    ("NUT-MIXD-16", "NUT-PIST-16"): 0.13,
+    ("NUT-MIXD-16", "NUT-ALMD-16"): 0.11,
+    ("NUT-PIST-08", "NUT-ALMD-08"): 0.18,
+    ("NUT-ALMD-08", "NUT-PIST-08"): 0.17,
+    ("NUT-PIST-32", "NUT-MIXD-32"): 0.16,
+    ("NUT-PIST-08", "NUT-PIST-16"): 0.28,   # size-pack substitution
+    ("BEV-COLA-12", "BEV-COLA-24"): 0.25,
+    ("BEV-COLA-24", "BEV-COLA-12"): 0.22,
+    ("BEV-WTER-06", "BEV-WTER-12"): 0.23,
+    ("BEV-WTER-12", "BEV-WTER-06"): 0.20,
 }
 
 
@@ -159,8 +163,8 @@ def compute_cannibalization(
         else:
             cross_e = FALLBACK_CROSS_ELASTICITIES.get((focal_sku_id, affected_sku_id), 0.0)
 
-        if abs(cross_e) < 0.01:
-            continue  # negligible cross-effect
+        if abs(cross_e) < 0.10:
+            continue  # negligible cross-effect — below 10% threshold
 
         baseline_vol = baseline_weekly.get(affected_sku_id, 0.0)
         if baseline_vol <= 0:

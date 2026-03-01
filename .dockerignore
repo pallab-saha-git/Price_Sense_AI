@@ -22,6 +22,15 @@ data/*.sqlite
 data/*.sqlite3
 data/synthetic/
 
+# ── Large dataset zips — NEVER bake into the image ────────────────────────────
+# data/zip/ is volume-mounted at runtime (./data:/app/data in docker-compose.yml).
+# If zips are not present on startup, data/download_dunnhumby.py fetches them.
+data/zip/
+
+# ── Ingestion sentinel — runtime artefact ─────────────────────────────────────
+data/.dunnhumby_loaded
+data/zip/*.partial
+
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/
 *.log

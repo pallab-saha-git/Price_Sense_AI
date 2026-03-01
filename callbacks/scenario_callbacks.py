@@ -62,6 +62,16 @@ def register(app):
 
             df = scenarios_to_dataframe(comparison)
 
+            if df.empty:
+                return dbc.Alert(
+                    [
+                        html.H5("No scenarios could be computed", className="alert-heading"),
+                        html.P("All discount scenarios failed during modelling. "
+                               "This is usually a forecasting issue — try a different product or date range."),
+                    ],
+                    color="warning",
+                )
+
             from components.scenario_table import scenario_table
             from components.elasticity_chart import scenario_bar_chart
             from components.insight_panel import scenario_insight_panel
@@ -75,14 +85,14 @@ def register(app):
                     ins_panel,
                     dbc.Card(
                         [
-                            dbc.CardHeader(html.H6("📊 Side-by-Side Discount Comparison", className="mb-0")),
+                            dbc.CardHeader(html.H6("Side-by-Side Discount Comparison", className="mb-0")),
                             dbc.CardBody(table),
                         ],
                         className="shadow-sm mb-3",
                     ),
                     dbc.Card(
                         [
-                            dbc.CardHeader(html.H6("📈 Net Profit by Discount Level", className="mb-0")),
+                            dbc.CardHeader(html.H6("Net Profit by Discount Level", className="mb-0")),
                             dbc.CardBody(bar_chart),
                         ],
                         className="shadow-sm",

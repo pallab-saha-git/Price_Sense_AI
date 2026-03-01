@@ -169,6 +169,25 @@ class CustomerSegment(Base):
     price_elasticity              = Column(Float)
     promo_response_multiplier     = Column(Float)
     cannibalization_susceptibility = Column(Float)
+    # Gender distribution (female %) for this segment — derived from hh_demographic.csv
+    # or synthetic assignment when real data is unavailable.
+    gender_female_pct             = Column(Float, nullable=True)
+
+
+class WeatherIndex(Base):
+    """
+    Monthly weather demand index per region.
+    Captures how temperature/season depresses or lifts category demand.
+    Populated from Open-Meteo API (free, no key) or synthetic fallback.
+    """
+    __tablename__ = "weather_index"
+
+    id                   = Column(Integer, primary_key=True, autoincrement=True)
+    region               = Column(String(10), nullable=False, index=True)   # NE | SE | MW | W | SW | UK
+    month                = Column(Integer, nullable=False)                   # 1–12
+    avg_temp_f           = Column(Float)                                     # average °F for that month/region
+    precipitation_in     = Column(Float)                                     # avg monthly precipitation inches
+    weather_demand_index = Column(Float, default=1.0)                       # demand multiplier vs baseline
 
 
 class User(Base):
@@ -193,6 +212,58 @@ class User(Base):
 def create_tables():
     """Create all tables (idempotent — safe to call on every startup)."""
     Base.metadata.create_all(bind=engine)
+
+
+# Guard so migrate_tables() runs at most once per Python process, even if
+# called from multiple code paths (gunicorn workers, background scripts, etc.).
+_migration_done: bool = False
+
+
+def migrate_tables():
+    """
+    Lightweight schema migration for SQLite.
+
+    `create_tables()` handles entirely new tables (CREATE TABLE IF NOT EXISTS).
+    This function handles new COLUMNS added to existing tables via ALTER TABLE.
+
+    SQLite does not support IF NOT EXISTS on ALTER TABLE ADD COLUMN, so we
+    query PRAGMA table_info first to check which columns are already present.
+
+    Add new column definitions here whenever the ORM schema gains a new column.
+    """
+    global _migration_done
+    if _migration_done:
+        return
+    _migration_done = True
+
+    create_tables()   # ensure all tables exist first
+
+    # List of (table_name, column_name, sqlite_type, default_clause)
+    NEW_COLUMNS = [
+        # Added in v1.1 — gender distribution per customer segment
+        ("customer_segments", "gender_female_pct", "REAL", "DEFAULT NULL"),
+        # Added in v1.1 — weather demand index (new table, rows managed by seed/loader)
+        # The weather_index TABLE is created by create_tables(); no new columns here.
+    ]
+
+    with engine.connect() as conn:
+        for table, col, col_type, default in NEW_COLUMNS:
+            try:
+                result = conn.execute(
+                    __import__("sqlalchemy").text(f"PRAGMA table_info({table})")
+                )
+                existing_cols = {row[1] for row in result}
+                if col not in existing_cols:
+                    conn.execute(
+                        __import__("sqlalchemy").text(
+                            f"ALTER TABLE {table} ADD COLUMN {col} {col_type} {default}"
+                        )
+                    )
+                    conn.commit()
+                    # Log using print since loguru may not be configured in all call sites
+                    print(f"[migrate] ALTER TABLE {table} ADD COLUMN {col}")
+            except Exception as exc:
+                print(f"[migrate] Warning — could not migrate {table}.{col}: {exc}")
 
 
 def get_db() -> Session:

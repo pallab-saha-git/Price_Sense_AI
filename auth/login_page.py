@@ -12,8 +12,6 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-dash.register_page("login",    path="/login",    title="Login — Price Sense AI")
-dash.register_page("register", path="/register", title="Register — Price Sense AI")
 
 
 # ── Shared card wrapper ────────────────────────────────────────────────────────
@@ -85,13 +83,10 @@ def layout(**kwargs):
     )
 
 
-# ── Register page ─────────────────────────────────────────────────────────────
+# ── Register page layout ─────────────────────────────────────────────────────
 
-# We re-use a separate module function so Dash can discover it
-import importlib, sys
+import sys
 
-# Register the /register page with its own layout
-_register_module = type(sys)("register_page_mod")
 
 def _register_layout(**kwargs):
     from config.settings import REGISTRATION_DISABLED
@@ -144,6 +139,6 @@ def _register_layout(**kwargs):
     )
 
 
-# Patch the module so Dash can pick up the second page layout
-_register_module.layout = _register_layout
-sys.modules["pages.register"] = _register_module
+# Register both pages now that layout callables are fully defined
+dash.register_page("login",    path="/login",    title="Login — Price Sense AI",    layout=layout)
+dash.register_page("register", path="/register", title="Register — Price Sense AI", layout=_register_layout)

@@ -1,0 +1,328 @@
+/* ============================================================
+   Price Sense AI — Custom Stylesheet
+   Professional corporate retail-analytics theme
+   Navy primary · white card headers · clean data surfaces
+   ============================================================ */
+
+/* ── CSS Custom Properties (design tokens) ────────────────── */
+:root {
+    --brand-navy:      #0f2d4a;
+    --brand-navy-mid:  #163f65;
+    --brand-blue:      #0e6fb0;
+    --brand-gold:      #c8933e;
+    --surface-bg:      #f2f5fa;
+    --surface-card:    #ffffff;
+    --border-color:    #cdd6e4;
+    --text-heading:    #0f2d4a;
+    --text-body:       #1e293b;
+    --text-muted:      #5a6e84;
+    --success:         #145a32;
+    --warning:         #8a5c00;
+    --danger:          #8b1a1a;
+    --info:            #0c4a6e;
+}
+
+/* ── Page background & base typography ─────────────────────── */
+body {
+    background-color: var(--surface-bg);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text-body);
+    font-size: 14px;
+}
+
+/* ── Navbar ─────────────────────────────────────────────────── */
+.navbar {
+    background-color: var(--brand-navy) !important;
+    border-bottom: 3px solid var(--brand-gold);
+}
+
+.navbar-brand {
+    letter-spacing: 0.02em;
+    color: #ffffff !important;
+    font-weight: 700;
+}
+
+.nav-link {
+    color: #b8cce0 !important;
+    font-size: 13.5px;
+    transition: color 0.15s ease;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: #ffffff !important;
+}
+
+.nav-link.active {
+    border-bottom: 2px solid var(--brand-gold);
+    padding-bottom: 2px;
+}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--surface-card);
+}
+
+/* Card headers: dark navy with white text */
+.card-header {
+    background-color: var(--brand-navy-mid);
+    border-bottom: 1px solid var(--brand-navy);
+    padding: 0.6rem 1rem;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-radius: 7px 7px 0 0 !important;
+}
+
+/* Card header for the Configure Promotion panel */
+.card-header-dark {
+    background-color: var(--brand-navy) !important;
+    border-bottom: 2px solid var(--brand-gold) !important;
+    color: #ffffff !important;
+    border-radius: 7px 7px 0 0 !important;
+}
+
+.card-body {
+    background-color: var(--surface-card);
+    padding: 1rem;
+    border-radius: 0 0 8px 8px;
+}
+
+/* Metric mini-cards insider recommendation card */
+.card .card.border-0 {
+    background-color: #f0f5fb !important;
+    border: 1px solid #d5e0ed !important;
+    border-radius: 6px !important;
+}
+
+.shadow-sm {
+    box-shadow: 0 1px 4px rgba(15, 45, 74, 0.10) !important;
+}
+
+/* ── KPI metric cards ───────────────────────────────────────── */
+.kpi-card .card-body {
+    padding: 0.85rem 1rem;
+    background-color: #f0f5fb;
+}
+
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn-primary {
+    background-color: var(--brand-blue);
+    border-color: var(--brand-blue);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.btn-primary:hover {
+    background-color: var(--brand-navy-mid);
+    border-color: var(--brand-navy-mid);
+}
+
+.btn-outline-primary {
+    color: var(--brand-blue);
+    border-color: var(--brand-blue);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: #ffffff;
+}
+
+/* ── Text colours ────────────────────────────────────────────── */
+.text-success { color: var(--success)  !important; }
+.text-danger  { color: var(--danger)   !important; }
+.text-warning { color: var(--warning)  !important; }
+.text-info    { color: var(--info)     !important; }
+.text-muted   { color: var(--text-muted) !important; }
+.text-primary { color: var(--brand-blue) !important; }
+
+/* ── Tables ─────────────────────────────────────────────────── */
+.table {
+    font-size: 13px;
+    color: var(--text-body);
+    background-color: #fff;
+}
+
+.table thead th {
+    background-color: var(--brand-navy);
+    color: #ffffff;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    border-bottom: 2px solid var(--brand-navy-mid);
+}
+
+.table tbody tr:hover {
+    background-color: #e8eef8;
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > * {
+    background-color: #f6f9fd;
+}
+
+/* ── Page containers ────────────────────────────────────────── */
+.container-fluid {
+    max-width: 1440px;
+}
+
+hr {
+    border-color: var(--border-color);
+    margin: 0.6rem 0 1.2rem 0;
+    opacity: 1;
+}
+
+/* ── Alerts ──────────────────────────────────────────────────── */
+.alert {
+    border-radius: 6px;
+    font-size: 13.5px;
+    font-weight: 500;
+}
+
+.alert-info {
+    background-color: #dbeaf7;
+    border-color: #90bee8;
+    color: #0c3a5c;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    border-color: #82c99a;
+    color: #0e3d1e;
+}
+
+.alert-warning {
+    background-color: #fef5dc;
+    border-color: #f0c050;
+    color: #5c3a00;
+}
+
+.alert-danger {
+    background-color: #fde8e8;
+    border-color: #f0a0a0;
+    color: #5c0e0e;
+}
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge.bg-success { background-color: var(--success) !important; }
+.badge.bg-danger  { background-color: var(--danger)  !important; }
+.badge.bg-warning { background-color: var(--warning) !important; color: #fff !important; }
+.badge.bg-info    { background-color: var(--info)    !important; }
+.badge.bg-primary { background-color: var(--brand-blue) !important; }
+
+/* ── Recommendation card header gradients ─────────────────────
+   RECOMMENDED = navy to forest green
+   MARGINAL    = navy to deep amber
+   NOT RECOMMENDED = deep maroon to navy
+   ─────────────────────────────────────────────────────────── */
+.rec-header-recommended { background: linear-gradient(135deg, #0f2d4a 0%, #145a32 100%) !important; }
+.rec-header-marginal     { background: linear-gradient(135deg, #5c3a00 0%, #c8933e 100%) !important; }
+.rec-header-not-rec      { background: linear-gradient(135deg, #5c0e0e 0%, #8b1a1a 100%) !important; }
+
+/* ── Dropdown & form controls ───────────────────────────────── */
+.Select-control,
+.form-control,
+.form-select {
+    font-size: 13.5px;
+    border-color: var(--border-color);
+    background-color: #f8fafd;
+    color: var(--text-body);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(14, 111, 176, 0.18);
+}
+
+/* ── Nav Tabs ───────────────────────────────────────────────── */
+.nav-tabs .nav-link {
+    color: var(--text-muted) !important;
+    border-color: transparent;
+    font-weight: 500;
+    font-size: 13.5px;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--brand-navy) !important;
+    border-color: var(--border-color) var(--border-color) #fff;
+    font-weight: 700;
+    border-bottom: 2px solid var(--brand-blue) !important;
+}
+
+/* ── Footer ─────────────────────────────────────────────────── */
+footer {
+    background-color: var(--brand-navy) !important;
+    border-top: 1px solid var(--brand-navy-mid) !important;
+    font-size: 12px;
+    color: #b8cce0 !important;
+}
+
+footer small {
+    color: #b8cce0;
+}
+
+/* ── AgGrid theme override ─────────────────────────────────── */
+.ag-theme-alpine {
+    font-size: 13px;
+    --ag-background-color: #ffffff;
+    --ag-header-background-color: #0f2d4a;
+    --ag-header-foreground-color: #ffffff;
+    --ag-odd-row-background-color: #f6f9fd;
+    --ag-border-color: #cdd6e4;
+    --ag-row-hover-color: #e2ecf8;
+    --ag-selected-row-background-color: #d4e8f7;
+}
+
+.ag-row-green {
+    background-color: #d4edda !important;
+    color: #0e3d1e !important;
+    font-weight: 600;
+}
+
+.ag-row-red {
+    background-color: #fde8e8 !important;
+    color: #5c0e0e !important;
+    font-weight: 600;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface-bg); }
+::-webkit-scrollbar-thumb { background: #8da8c0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #6a8da8; }
+
+/* ── Segment panel colour coding ────────────────────────────── */
+.segment-price-sensitive { color: var(--danger);  font-weight: 600; }
+.segment-loyalist        { color: var(--success); font-weight: 600; }
+.segment-occasional      { color: var(--warning); font-weight: 600; }
+
+/* ── Form labels in Configure Promotion ─────────────────────── */
+.card-body .form-label,
+.card-body label.form-label {
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--text-heading);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.3rem;
+}
+
+/* ── H-tags inside cards ────────────────────────────────────── */
+.card-body h2,
+.card-body h3,
+.card-body h4 {
+    color: var(--text-heading);
+}
+

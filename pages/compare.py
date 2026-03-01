@@ -22,7 +22,7 @@ def layout() -> html.Div:
     return html.Div(
         [
             dbc.Row(
-                dbc.Col(html.H3("📊 Scenario Comparison", className="fw-bold mt-3 mb-0"))
+                dbc.Col(html.H3("Scenario Comparison", className="fw-bold mt-3 mb-0"))
             ),
             html.Hr(),
 

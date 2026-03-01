@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 
 
 _REC_STYLES = {
-    "RECOMMENDED":     ("success", "✅ RECOMMENDED"),
-    "MARGINAL":        ("warning", "⚠️ MARGINAL"),
-    "NOT_RECOMMENDED": ("danger",  "❌ NOT RECOMMENDED"),
+    "RECOMMENDED":     ("success", "RECOMMENDED"),
+    "MARGINAL":        ("warning", "MARGINAL"),
+    "NOT_RECOMMENDED": ("danger",  "NOT RECOMMENDED"),
 }
 
 
@@ -52,12 +52,27 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
     risk_str    = f"{result.risk.band}  ({result.risk.total_score:.2f})"
     risk_col    = {"LOW": "text-success", "MEDIUM": "text-warning", "HIGH": "text-danger"}.get(result.risk.band, "")
 
+    # Confidence interval on elasticity → volume lift range
+    el          = result.elasticity
+    lift_lo     = round(abs(el.conf_int_low)  * result.discount_pct * 100, 0)
+    lift_hi     = round(abs(el.conf_int_high) * result.discount_pct * 100, 0)
+    if lift_lo > lift_hi:
+        lift_lo, lift_hi = lift_hi, lift_lo
+    ci_str      = f"+{lift_lo:.0f}% – +{lift_hi:.0f}%"
+    ci_note     = "95% CI" if el.is_reliable else "est. (low data)"
+    ci_col      = "text-success" if el.is_reliable else "text-warning"
+
+    # Segment multiplier badge
+    seg_mult    = getattr(result, "seg_multiplier", 1.0)
+    seg_str     = f"{seg_mult:.2f}x" if seg_mult != 1.0 else "1.00x (all stores)"
+    seg_col     = "text-success" if seg_mult >= 1.0 else "text-warning"
+
     # Alternative suggestion row
     alt_block = html.Div()
     if result.alt_discount_pct and result.alt_pnl:
         alt_block = dbc.Alert(
             [
-                html.Strong(f"💡 Suggestion: "),
+                html.Strong("Suggestion: "),
                 f"Try {result.alt_discount_pct*100:.0f}% off instead — "
                 f"projected net profit: ${result.alt_pnl.net_incremental_profit:,.0f} "
                 f"(ROI: {result.alt_pnl.promo_roi:.1f}x) with less margin erosion.",
@@ -108,11 +123,13 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
                     dbc.Row(
                         [
                             _metric_col("Volume Lift",          lift_str),
-                            _metric_col("Cannibalization",      cannibal, "margin cost",  "text-warning"),
+                            _metric_col("Lift Range (95% CI)",  ci_str,    ci_note,           ci_col),
+                            _metric_col("Cannibalization",      cannibal,  "margin cost",      "text-warning"),
+                            _metric_col("Net Incr. Profit",     profit_str, "",                profit_col),
+                            _metric_col("Promo ROI",            roi_str,   "",                 roi_col),
+                            _metric_col("Risk Score",           risk_str,  "",                 risk_col),
+                            _metric_col("Segment Response",     seg_str,   "customer mix adj", seg_col),
                             _metric_col("Net Incr. Revenue",    f"${result.pnl.incremental_revenue:,.0f}"),
-                            _metric_col("Net Incr. Profit",     profit_str, "",            profit_col),
-                            _metric_col("Promo ROI",            roi_str,   "",             roi_col),
-                            _metric_col("Risk Score",           risk_str,  "",             risk_col),
                         ],
                         className="g-2",
                     ),

@@ -43,135 +43,119 @@ def promo_input_form(products_df=None, stores_df=None) -> dbc.Card:
     return dbc.Card(
         [
             dbc.CardHeader(
-                html.H5("🎯 Configure Promotion", className="mb-0 text-white"),
-                style={"background": "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)"},
+                html.H5("Configure Promotion", className="mb-0 fw-bold"),
+                className="card-header-dark",
             ),
             dbc.CardBody(
                 [
-                    # Product selector
+                    # Category filter — own row
                     dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    dbc.Label("Product / SKU", html_for="dd-product"),
-                                    dcc.Dropdown(
-                                        id="dd-product",
-                                        options=get_product_options(products_df),
-                                        value="NUT-PIST-16",
-                                        clearable=False,
-                                        style={"fontSize": "14px"},
-                                    ),
-                                ],
-                                md=8,
+                        dbc.Col([
+                            dbc.Label("Category Filter", html_for="dd-category"),
+                            dcc.Dropdown(
+                                id="dd-category",
+                                options=[{"label": "All Categories", "value": "ALL"}],
+                                value="ALL",
+                                clearable=False,
+                                style={"fontSize": "14px"},
                             ),
-                            dbc.Col(
-                                [
-                                    dbc.Label("Category Filter", html_for="dd-category"),
-                                    dcc.Dropdown(
-                                        id="dd-category",
-                                        options=[
-                                            {"label": "All Categories", "value": "ALL"},
-                                            {"label": "Nuts",           "value": "Nuts"},
-                                            {"label": "Beverages",      "value": "Beverages"},
-                                        ],
-                                        value="ALL",
-                                        clearable=False,
-                                        style={"fontSize": "14px"},
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                        ],
+                        ]),
                         className="mb-3",
                     ),
 
-                    # Discount slider
+                    # Product / SKU — own row
                     dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    dbc.Label(id="lbl-discount", children="Discount: 25%"),
-                                    dcc.Slider(
-                                        id="sl-discount",
-                                        min=5, max=40, step=5,
-                                        value=25,
-                                        marks={v: f"{v}%" for v in range(5, 45, 5)},
-                                        tooltip={"placement": "bottom", "always_visible": False},
-                                    ),
-                                ],
-                                md=12,
+                        dbc.Col([
+                            dbc.Label("Product / SKU", html_for="dd-product"),
+                            dcc.Dropdown(
+                                id="dd-product",
+                                options=get_product_options(products_df),
+                                value="NUT-PIST-16",
+                                clearable=False,
+                                style={"fontSize": "14px"},
                             ),
-                        ],
+                        ]),
                         className="mb-3",
                     ),
 
-                    # Date range
+                    # Discount slider — own row
                     dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    dbc.Label("Promotion Window"),
-                                    dcc.DatePickerRange(
-                                        id="dp-promo-range",
-                                        min_date_allowed=str(date(2024, 1, 1)),
-                                        max_date_allowed=str(date(2027, 12, 31)),
-                                        start_date=str(default_start),
-                                        end_date=str(default_end),
-                                        display_format="YYYY-MM-DD",
-                                        style={"fontSize": "14px"},
-                                    ),
-                                ],
-                                md=12,
+                        dbc.Col([
+                            dbc.Label(id="lbl-discount", children="Discount: 25%"),
+                            dcc.Slider(
+                                id="sl-discount",
+                                min=5, max=40, step=5,
+                                value=25,
+                                marks={v: f"{v}%" for v in range(5, 45, 5)},
+                                tooltip={"placement": "bottom", "always_visible": False},
                             ),
-                        ],
+                        ]),
                         className="mb-3",
                     ),
 
-                    # Channel toggles
+                    # Promotion window — own row
                     dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    dbc.Label("Channels"),
-                                    dbc.Checklist(
-                                        id="chk-channels",
-                                        options=[
-                                            {"label": " In-store",   "value": "physical"},
-                                            {"label": " Online",     "value": "online"},
-                                        ],
-                                        value=["physical", "online"],
-                                        inline=True,
-                                        switch=True,
-                                    ),
-                                ],
-                                md=6,
+                        dbc.Col([
+                            dbc.Label("Promotion Window"),
+                            dcc.DatePickerRange(
+                                id="dp-promo-range",
+                                min_date_allowed=str(date(2024, 1, 1)),
+                                max_date_allowed=str(date(2027, 12, 31)),
+                                start_date=str(default_start),
+                                end_date=str(default_end),
+                                display_format="YYYY-MM-DD",
+                                style={"fontSize": "14px"},
                             ),
-                            dbc.Col(
-                                [
-                                    dbc.Label("Store scope"),
-                                    dcc.Dropdown(
-                                        id="dd-store",
-                                        options=get_store_options(stores_df),
-                                        value="ALL",
-                                        clearable=False,
-                                        style={"fontSize": "13px"},
-                                    ),
+                        ]),
+                        className="mb-3",
+                    ),
+
+                    # Channels — own row
+                    dbc.Row(
+                        dbc.Col([
+                            dbc.Label("Sales Channels"),
+                            dbc.Checklist(
+                                id="chk-channels",
+                                options=[
+                                    {"label": "  In-store", "value": "physical"},
+                                    {"label": "  Online",   "value": "online"},
                                 ],
-                                md=6,
+                                value=["physical", "online"],
+                                inline=False,
+                                switch=True,
+                                className="mt-1",
                             ),
-                        ],
+                        ]),
+                        className="mb-3",
+                    ),
+
+                    # Store scope — own row
+                    dbc.Row(
+                        dbc.Col([
+                            dbc.Label("Store Scope"),
+                            dcc.Dropdown(
+                                id="dd-store",
+                                options=get_store_options(stores_df),
+                                value="ALL",
+                                clearable=False,
+                                style={"fontSize": "13px"},
+                            ),
+                            html.Small(
+                                "Store list updates based on selected channels.",
+                                className="text-muted mt-1 d-block",
+                                style={"fontSize": "11px"},
+                            ),
+                        ]),
                         className="mb-4",
                     ),
 
                     # Analyze button
                     dbc.Button(
-                        "⚡ Analyze Promotion →",
+                        "Run Analysis",
                         id="btn-analyze",
                         color="primary",
                         size="lg",
-                        className="w-100 fw-bold",
-                        style={"background": "linear-gradient(135deg, #0f3460 0%, #e94560 100%)",
-                               "border": "none"},
+                        className="w-100 fw-semibold",
                     ),
 
                     # Loading indicator

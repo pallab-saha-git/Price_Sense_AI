@@ -82,7 +82,7 @@ def risk_factor_bars(risk: "RiskResult") -> dcc.Graph:
     fig.add_vline(x=0, line_color="gray", opacity=0.3)
 
     fig.update_layout(
-        title=dict(text="⚖️ Risk Factor Breakdown", font=dict(size=13)),
+        title=dict(text="Risk Factor Breakdown", font=dict(size=13)),
         xaxis_title="Weighted contribution to total risk",
         yaxis_title="",
         template="plotly_white",

@@ -366,15 +366,25 @@ def _generate_seasonality_index(stores_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _generate_customer_segments(stores_df: pd.DataFrame) -> pd.DataFrame:
-    """3 segments per store."""
+    """3 segments per store with gender distribution based on US grocery shopper research.
+
+    US grocery shoppers: ~52% female overall (FMI 2023).
+    Price-sensitive shoppers skew slightly more female (single-parent HHs).
+    Loyalists are near-average. Occasional shoppers skew slightly more male.
+    """
     segments = [
-        ("price_sensitive", 0.45, -2.8, 1.8, 0.75),
-        ("loyalist",        0.35, -1.5, 1.2, 0.25),
-        ("occasional",      0.20, -2.0, 1.4, 0.50),
+        # (name, base_share, elasticity, promo_resp, cannibal, female_pct)
+        ("price_sensitive", 0.45, -2.8, 1.8, 0.75, 55.0),
+        ("loyalist",        0.35, -1.5, 1.2, 0.25, 52.0),
+        ("occasional",      0.20, -2.0, 1.4, 0.50, 48.0),
     ]
     rows = []
     for _, store in stores_df.iterrows():
-        for seg_name, share, elas, promo_resp, cannibal in segments:
+        # Regional variation: SE stores skew slightly higher female (Southern retail patterns)
+        region_factor = {"SE": 1.5, "NE": 0.0, "MW": 0.0, "W": -1.0}.get(
+            store.get("region", ""), 0.0
+        )
+        for seg_name, share, elas, promo_resp, cannibal, fem_pct in segments:
             rows.append({
                 "store_id":                       store["store_id"],
                 "segment_name":                   seg_name,
@@ -382,12 +392,57 @@ def _generate_customer_segments(stores_df: pd.DataFrame) -> pd.DataFrame:
                 "price_elasticity":               elas + round(random.uniform(-0.2, 0.2), 3),
                 "promo_response_multiplier":      promo_resp + round(random.uniform(-0.1, 0.1), 3),
                 "cannibalization_susceptibility": cannibal + round(random.uniform(-0.05, 0.05), 3),
+                "gender_female_pct":              round(fem_pct + region_factor + random.uniform(-1.5, 1.5), 1),
             })
     return pd.DataFrame(rows)
 
 
-def _generate_calendar_events() -> pd.DataFrame:
-    """Build CalendarEvents from hardcoded NRF events + holidays package."""
+def _generate_weather_index() -> pd.DataFrame:
+    """
+    Generate synthetic monthly weather index per region.
+    Mirrors the WeatherIndex DB table populated by Open-Meteo in the dunnhumby path.
+
+    avg_temp_f: representative monthly average temperature in °F.
+    precipitation_in: average monthly precipitation in inches.
+    weather_demand_index: demand multiplier (cold → comfort-food boost; hot → slight dip).
+    """
+    TEMPS = {
+        "NE":  [32, 35, 44, 55, 65, 75, 80, 78, 70, 58, 47, 36],
+        "SE":  [52, 56, 63, 72, 79, 85, 88, 87, 82, 72, 62, 53],
+        "MW":  [26, 30, 42, 55, 65, 75, 79, 77, 69, 57, 43, 30],
+        "W":   [58, 60, 62, 65, 68, 73, 78, 79, 76, 70, 63, 57],
+        "ALL": [38, 41, 50, 61, 70, 78, 82, 80, 73, 62, 51, 40],  # online / no-region stores
+    }
+    PRECIP = {
+        "NE":  [3.4, 3.1, 3.8, 3.9, 3.7, 3.6, 4.0, 3.8, 3.5, 3.2, 3.4, 3.5],
+        "SE":  [4.5, 4.0, 4.8, 3.5, 3.8, 6.0, 7.2, 6.8, 4.5, 3.2, 3.5, 4.0],
+        "MW":  [1.8, 1.6, 2.5, 3.4, 3.8, 3.7, 4.0, 3.5, 2.9, 2.4, 2.2, 1.9],
+        "W":   [3.8, 3.5, 2.9, 1.4, 0.8, 0.3, 0.1, 0.2, 0.5, 1.5, 2.7, 3.6],
+        "ALL": [3.0, 2.7, 3.2, 3.0, 2.8, 3.0, 3.2, 2.9, 2.8, 2.5, 2.8, 3.0],
+    }
+
+    def demand_index(t: float) -> float:
+        if t < 35:    return 1.20
+        elif t < 50:  return 1.10
+        elif t < 65:  return 1.00
+        elif t < 78:  return 0.97
+        else:          return 0.93
+
+    rows = []
+    for region, temps in TEMPS.items():
+        precips = PRECIP.get(region, PRECIP["ALL"])
+        for month_i, (temp, precip) in enumerate(zip(temps, precips), start=1):
+            rows.append({
+                "region":               region,
+                "month":                month_i,
+                "avg_temp_f":           float(temp),
+                "precipitation_in":     round(precip + random.uniform(-0.2, 0.2), 2),
+                "weather_demand_index": round(demand_index(float(temp)), 3),
+            })
+    return pd.DataFrame(rows)
+
+
+def _generate_calendar_events() -> pd.DataFrame:    """Build CalendarEvents from hardcoded NRF events + holidays package."""
     try:
         import holidays as hols
         us_hols_2024 = hols.US(years=2024)
@@ -470,6 +525,10 @@ def generate_all() -> dict[str, pd.DataFrame]:
     calendar_df = _generate_calendar_events()
     print(f"  Calendar events: {len(calendar_df)}")
 
+    # 9. Weather index
+    weather_df = _generate_weather_index()
+    print(f"  Weather index: {len(weather_df)} rows (5 regions × 12 months)")
+
     # Save CSVs
     datasets = {
         "products":          products_df,
@@ -480,6 +539,7 @@ def generate_all() -> dict[str, pd.DataFrame]:
         "seasonality_index": seas_df,
         "customer_segments": segments_df,
         "calendar_events":   calendar_df,
+        "weather_index":     weather_df,
     }
     for name, df in datasets.items():
         path = SYNTHETIC_DIR / f"{name}.csv"

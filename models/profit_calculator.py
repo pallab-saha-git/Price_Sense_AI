@@ -66,9 +66,15 @@ class PromoPnL:
 
     @property
     def recommendation_tier(self) -> str:
-        if self.net_incremental_profit > 0 and self.promo_roi >= 1.5:
+        """Promotion tier based on net incremental profit and ROI.
+
+        RECOMMENDED   — positive net profit AND ROI ≥ 1.0x (cleared cost of discount)
+        MARGINAL      — profitable but ROI < 1.0, OR small loss (ROI > -0.15)
+        NOT_RECOMMENDED — net loss deeper than 15% of discount cost
+        """
+        if self.net_incremental_profit > 0 and self.promo_roi >= 1.0:
             return "RECOMMENDED"
-        elif self.net_incremental_profit > 0:
+        elif self.net_incremental_profit > 0 or self.promo_roi > -0.15:
             return "MARGINAL"
         else:
             return "NOT_RECOMMENDED"
@@ -92,7 +98,7 @@ def calculate_promo_pnl(
     volume_lift_pct:       float,       # e.g. 0.42 for +42%
     promo_weeks:           int = 1,
     cannibalization_cost:  float = 0.0,
-    forward_buy_factor:    float = 0.10,  # 10% of incremental attributed to pull-forward
+    forward_buy_factor:    float = 0.02,  # 2% of incremental attributed to pull-forward
 ) -> PromoPnL:
     """
     Calculate the full promotion P&L.

@@ -16,7 +16,7 @@ def layout() -> html.Div:
     return html.Div(
         [
             dbc.Row(
-                dbc.Col(html.H3("📦 Product Catalog & Promo History", className="fw-bold mt-3 mb-0"))
+                dbc.Col(html.H3("Product Catalog & Promo History", className="fw-bold mt-3 mb-0"))
             ),
             html.Hr(),
 
@@ -32,8 +32,6 @@ def layout() -> html.Div:
                                         id="dd-cat-filter",
                                         options=[
                                             {"label": "All", "value": "ALL"},
-                                            {"label": "Nuts", "value": "Nuts"},
-                                            {"label": "Beverages", "value": "Beverages"},
                                         ],
                                         value="ALL",
                                         clearable=False,
@@ -65,7 +63,7 @@ def layout() -> html.Div:
 
             # Promo history
             dbc.Row(
-                dbc.Col(html.H5("📅 Historical Promotion Performance", className="fw-semibold"))
+                dbc.Col(html.H5("Historical Promotion Performance", className="fw-semibold"))
             ),
             dcc.Loading(
                 type="dot",

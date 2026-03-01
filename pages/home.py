@@ -14,13 +14,12 @@ from dash import dcc, html, register_page
 register_page(__name__, path="/", name="Home", title="Price Sense AI — Home")
 
 
-def _kpi_card(title: str, value: str, delta: str = "", color: str = "primary", icon: str = "") -> dbc.Col:
+def _kpi_card(title: str, value: str, delta: str = "", color: str = "primary") -> dbc.Col:
     return dbc.Col(
         dbc.Card(
             dbc.CardBody(
                 [
-                    html.P([html.Span(icon + " ", style={"marginRight": 4}), title],
-                           className="text-muted mb-1", style={"fontSize": "12px"}),
+                    html.P(title, className="text-muted mb-1", style={"fontSize": "12px", "textTransform": "uppercase", "letterSpacing": "0.04em"}),
                     html.H3(value, className=f"fw-bold text-{color} mb-0"),
                     html.Small(delta, className="text-muted") if delta else None,
                 ],
@@ -40,7 +39,7 @@ def layout() -> html.Div:
                 dbc.Col(
                     html.Div(
                         [
-                            html.H2("🏪 Promotion Intelligence Dashboard",
+                            html.H2("Promotion Intelligence Dashboard",
                                     className="fw-bold mb-1 mt-3"),
                             html.P(
                                 "AI-powered promotion analysis for mid-market retailers. "
@@ -56,10 +55,10 @@ def layout() -> html.Div:
             # KPI row
             dbc.Row(
                 [
-                    _kpi_card("Avg Promo ROI",       "2.1×",    "vs 1.8× last quarter", "success",  "📈"),
-                    _kpi_card("Profitable Promos",   "68%",     "+8pp vs baseline",      "primary",  "✅"),
-                    _kpi_card("Avg Lift Accuracy",   "±8%",     "MAPE across 60 promos", "info",     "🎯"),
-                    _kpi_card("SKUs Analyzed",       "15",      "2 categories",          "secondary","📦"),
+                    _kpi_card("Avg Promo ROI",       "2.1x",    "vs 1.8x last quarter", "success"),
+                    _kpi_card("Profitable Promos",   "68%",     "+8pp vs baseline",      "primary"),
+                    _kpi_card("Avg Lift Accuracy",   "\u00b18%",     "MAPE across 60 promos", "info"),
+                    _kpi_card("SKUs Analyzed",       "15",      "2 categories",          "secondary"),
                 ],
                 className="g-3 mb-4",
             ),
@@ -70,7 +69,7 @@ def layout() -> html.Div:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader(html.H6("📊 Category Volume Trend", className="mb-0")),
+                                dbc.CardHeader(html.H6("Category Volume Trend", className="mb-0")),
                                 dbc.CardBody(dcc.Graph(
                                     figure=_sample_trend_chart(),
                                     config={"displayModeBar": False},
@@ -84,7 +83,7 @@ def layout() -> html.Div:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader(html.H6("🗂 Recent Analyses", className="mb-0")),
+                                dbc.CardHeader(html.H6("Recent Analyses", className="mb-0")),
                                 dbc.CardBody(_recent_analyses_table()),
                             ],
                             className="shadow-sm",
@@ -100,9 +99,9 @@ def layout() -> html.Div:
                 dbc.Col(
                     dbc.Alert(
                         [
-                            html.H5("👉 Ready to analyze a promotion?", className="alert-heading"),
+                            html.H5("Ready to analyze a promotion?", className="alert-heading"),
                             html.P(
-                                "Click 'Analyze' in the navigation bar to run a full promo analysis "
+                                "Click Analyze in the navigation bar to run a full promo analysis "
                                 "— including elasticity, cannibalization, P&L, and risk scoring. "
                                 "Results appear instantly with actionable insights.",
                                 className="mb-0",
@@ -146,26 +145,31 @@ def _sample_trend_chart():
 
 def _recent_analyses_table():
     data = [
-        ("NUT-PIST-16", "25% off",  "❌ No",   "0.65"),
-        ("NUT-ALMD-16", "15% off",  "✅ Yes",  "2.1×"),
-        ("BEV-COLA-12", "20% off",  "✅ Yes",  "1.8×"),
-        ("NUT-MIXD-16", "30% off",  "⚠️ Marg", "0.9×"),
-        ("BEV-WTER-12", "10% off",  "✅ Yes",  "1.4×"),
+        ("NUT-PIST-16", "Salted Pistachios 16oz", "25% off",  "No",    "0.65x"),
+        ("NUT-ALMD-16", "Roasted Almonds 16oz",   "15% off",  "Yes",   "2.1x"),
+        ("BEV-COLA-12", "Cola 12pk",               "20% off",  "Yes",   "1.8x"),
+        ("NUT-MIXD-16", "Mixed Nuts 16oz",         "30% off",  "Marg",  "0.9x"),
+        ("BEV-WTER-12", "Spring Water 12pk",       "10% off",  "Yes",   "1.4x"),
     ]
     rows = [
-        html.Tr([html.Td(sku, style={"fontSize": "12px"}),
-                 html.Td(disc, style={"fontSize": "12px"}),
-                 html.Td(rec),
-                 html.Td(roi, style={"fontSize": "12px"})])
-        for sku, disc, rec, roi in data
+        html.Tr([
+            html.Td(html.Div([
+                html.Span(sku,  style={"fontSize": "11px", "color": "#888", "display": "block"}),
+                html.Span(name, style={"fontSize": "12px", "fontWeight": 500}),
+            ])),
+            html.Td(disc, style={"fontSize": "12px"}),
+            html.Td(rec),
+            html.Td(roi, style={"fontSize": "12px"}),
+        ])
+        for sku, name, disc, rec, roi in data
     ]
     return dbc.Table(
         [
             html.Thead(html.Tr([
-                html.Th("SKU", style={"fontSize": "12px"}),
-                html.Th("Discount"),
-                html.Th("Rec."),
-                html.Th("ROI"),
+                html.Th("Product", style={"fontSize": "12px"}),
+                html.Th("Discount", style={"fontSize": "12px"}),
+                html.Th("Rec.", style={"fontSize": "12px"}),
+                html.Th("ROI", style={"fontSize": "12px"}),
             ])),
             html.Tbody(rows),
         ],

@@ -56,8 +56,10 @@ OPEN_ROUTER_API_KEY=sk-or-...   # optional — enables AI insights
 ```bash
 python data/seed_data.py
 ```
-This creates `data/synthetic/` CSVs and populates `data/pricesense.db` (SQLite).  
+If `data/synthetic/` CSVs do not exist yet, `seed_data.py` runs `synthetic_generator.py` automatically before seeding.  
 Safe to re-run — it detects an already-seeded database.
+
+> **Note:** `data/synthetic/` is git-ignored. To regenerate CSVs independently: `python data/synthetic_generator.py`
 
 ### 7. Start the app
 ```bash
@@ -72,10 +74,11 @@ You will be redirected to **`/login`**. Log in with the `ADMIN_USERNAME` / `ADMI
 ## Quick Start (Docker)
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
-Open **http://localhost:8050**. The database is seeded automatically.
+Open **http://localhost:8050**. The database is seeded automatically.  
+Synthetic demo CSVs are generated during the Docker build step — no manual data download needed.
 
 ---
 
@@ -97,7 +100,7 @@ Trinamix/
 │   ├── database.py             # SQLAlchemy ORM (8 tables)
 │   ├── synthetic_generator.py  # Generates realistic demo data
 │   ├── seed_data.py            # Loads CSVs → SQLite
-│   └── synthetic/              # Auto-generated CSV files
+│   └── synthetic/              # Auto-generated CSV files (git-ignored; generated at build/startup)
 │
 ├── models/
 │   ├── elasticity.py           # Log-log OLS price elasticity
@@ -214,10 +217,112 @@ Change the model by setting `OPENROUTER_MODEL=<model-id>` in `.env`.
 
 ## Data Model
 
-15 SKUs — 9 Nut varieties + 6 Beverage varieties  
-25 stores across 5 regions  
-104 weeks of synthetic weekly sales (2024 – 2026)  
-60 historical promotions with realistic seasonality (Diwali, Christmas, summer)
+### Synthetic Demo Data (default)
+
+The `data/synthetic/` CSVs are **not committed to git** — they are generated automatically.
+
+| Where | How |
+|---|---|
+| **Docker** | `RUN python data/synthetic_generator.py` bakes the CSVs into the image at build time. On first start with a volume mount (`./data:/app/data`), the CMD startup guard regenerates them into the mounted directory if they are absent. |
+| **Local (non-Docker)** | `python data/seed_data.py` auto-generates the CSVs before seeding, or run the generator directly: `python data/synthetic_generator.py` |
+
+**Contents:**
+- 15 SKUs — 9 Nut varieties + 6 Beverage varieties  
+- 25 stores across 5 regions  
+- 104 weeks of synthetic weekly sales (2024 – 2026)  
+- 60 historical promotions with realistic seasonality (Diwali, Christmas, summer)
+
+To regenerate with a different random seed, edit `SEED` in [data/synthetic_generator.py](data/synthetic_generator.py) and re-run it.
+
+---
+
+## Real Dataset — dunnhumby
+
+The app can run on real retail transaction data from **dunnhumby**.
+
+> **Why isn't there an automated Docker download step?**  
+> dunnhumby Source Files require a free account registration on their website.  
+> Automated download scripts cannot bypass that registration wall.  
+> Place the downloaded zip(s) in `data/zip/` **before** starting Docker —  
+> the `docker-compose.yml` already mounts `./data` into the container, so  
+> no extra volume configuration is needed.
+
+### Option A: Download from dunnhumby Source Files (recommended)
+
+1. Visit **https://www.dunnhumby.com/source-files/**
+2. Register (free) and download either:
+   - **"The Complete Journey"** — 128 MB zip, ~2,500 households, best for local dev
+   - **"Let's Get Sort of Real"** (Full) — 9 × 480 MB zips (~4.3 GB total), full retail chain transaction history 2006–2011
+
+3. Place the downloaded zip(s) in your local `data/zip/` folder:
+   ```
+   Trinamix/
+   └── data/
+       └── zip/
+           ├── dunnhumby_The-Complete-Journey.zip          ← Complete Journey
+           ├── dunnhumby_Let's-Get-Sort-of-Real-(Full-Part-1-of-9).zip
+           └── ...
+           └── dunnhumby_Let's-Get-Sort-of-Real-(Full-Part-9-of-9).zip
+   ```
+
+4. Start Docker — the loader runs automatically on first start:
+   ```bash
+   # The ./data/ directory is mounted into the container,
+   # so zips in data/zip/ are immediately visible to Docker.
+   docker compose up --build
+   ```
+   The container detects the zips at startup and runs `python data/load_dunnhumby.py`
+   automatically (one-time, ~2–5 min for Complete Journey). Subsequent restarts skip it.
+
+   Or run the loader manually (outside Docker):
+   ```bash
+   python data/load_dunnhumby.py
+   ```
+   To force a reload (clears existing dunnhumby data and re-ingests):
+   ```bash
+   python data/load_dunnhumby.py --force
+   ```
+
+### Option B: Kaggle Hub (programmatic download)
+
+```bash
+pip install kagglehub
+```
+
+```python
+import kagglehub
+from kagglehub import KaggleDatasetAdapter
+
+hf_dataset = kagglehub.load_dataset(
+    KaggleDatasetAdapter.HUGGING_FACE,
+    "frtgnn/dunnhumby-the-complete-journey",
+    "",   # file_path — leave empty to load all files
+)
+print("Hugging Face Dataset:", hf_dataset)
+```
+
+### Dataset Priority
+
+When `data/zip/` contains zips, the Docker entrypoint follows this priority:
+
+| Priority | Dataset | Size | Rows (approx) |
+|----------|---------|------|---------------|
+| 1 | The Complete Journey | 128 MB zip | ~500K weekly aggregates |
+| 2 | Let's Get Sort of Real | 9 × 480 MB | Sampled ~270K weekly aggregates |
+| fallback | Synthetic data | ~3 MB | ~40K rows (auto-generated) |
+
+### What changes with real data
+
+- **Elasticity** computed from real observed price variation across 2+ years
+- **Stores** reflect actual retail footprint (50+ stores with real regional patterns)
+- **Cannibalization** signals from actual basket co-purchase data
+- **Seasonality** reflects real promotional calendar and holiday lifts
+- **Calendar events** populated from [`holidays`](https://pypi.org/project/holidays/) package (US/UK public holidays) + hardcoded NRF retail calendar (Black Friday, Diwali, Cyber Monday, etc.)
+- **Competitor events** generated synthetically per product category (~5 events/category/year) to calibrate competitive price pressure
+- **Gender distribution** (`gender_female_pct`) derived from `hh_demographic.csv` household composition data (Complete Journey) or UK grocery research benchmarks (LGSR); stored per customer segment
+- **Cost & margin** assigned synthetically: `cost_price = regular_price × 0.58` (CJ) or `× 0.60` (LGSR). The `products` table always has `cost_price` and `margin_pct` for full P&L analysis
+- **Weather index** populated from [Open-Meteo API](https://open-meteo.com/) (free, no key needed) for representative coordinates per region. Falls back to hardcoded seasonal averages if the API is unavailable
+- Recommendation card shows real product names, departments, and brand tiers
 
 ---
 

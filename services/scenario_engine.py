@@ -130,7 +130,7 @@ def scenarios_to_dataframe(comparison: ScenarioComparisonResult) -> "pd.DataFram
     import pandas as pd
 
     def _badge(rec: str) -> str:
-        return {"RECOMMENDED": "✅", "MARGINAL": "⚠️", "NOT_RECOMMENDED": "❌"}.get(rec, "")
+        return {"RECOMMENDED": "OK", "MARGINAL": "MARG", "NOT_RECOMMENDED": "NO"}.get(rec, "")
 
     data = []
     for r in comparison.scenarios:
@@ -144,7 +144,7 @@ def scenarios_to_dataframe(comparison: ScenarioComparisonResult) -> "pd.DataFram
             "Cannibal. Cost":   f"${r.cannibalization_cost:,.0f}",
             "Risk":             r.risk_band,
             "Decision":         _badge(r.recommendation) + " " + r.recommendation.replace("_", " ").title(),
-            "Optimal?":         "⭐ Best" if r.is_optimal else "",
+            "Optimal?":         "Best" if r.is_optimal else "",
             # Raw values for sorting / styling
             "_profit_raw":      r.net_incremental_profit,
             "_discount_raw":    r.discount_pct,

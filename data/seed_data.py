@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 from config.settings import SYNTHETIC_DIR
 from data.database import (
     CalendarEvent, CompetitorEvent, CustomerSegment, Product,
-    Promotion, Sale, SeasonalityIndex, Store, create_tables, get_session,
+    Promotion, Sale, SeasonalityIndex, Store, WeatherIndex,
+    create_tables, migrate_tables, get_session,
 )
 
 _SYNTH = Path(SYNTHETIC_DIR)
@@ -149,9 +150,19 @@ def _load_competitor_events(session: Session, df: pd.DataFrame):
 
 
 def _load_segments(session: Session, df: pd.DataFrame):
-    session.bulk_insert_mappings(CustomerSegment, df.to_dict("records"))
+    records = df.to_dict("records")
+    # Ensure gender_female_pct column is present (backward-compatible)
+    for r in records:
+        r.setdefault("gender_female_pct", None)
+    session.bulk_insert_mappings(CustomerSegment, records)
     session.commit()
     logger.info(f"Loaded {len(df)} customer segment rows")
+
+
+def _load_weather_index(session: Session, df: pd.DataFrame):
+    session.bulk_insert_mappings(WeatherIndex, df.to_dict("records"))
+    session.commit()
+    logger.info(f"Loaded {len(df)} weather index rows")
 
 
 def seed_database(force: bool = False):
@@ -159,7 +170,7 @@ def seed_database(force: bool = False):
     Seed the database from synthetic CSVs.
     Generates synthetic data if CSVs do not exist yet.
     """
-    create_tables()
+    migrate_tables()   # creates new tables + adds new columns to existing tables
     session = get_session()
 
     if not force and _already_seeded(session):
@@ -183,6 +194,8 @@ def seed_database(force: bool = False):
     _load_seasonality(session, pd.read_csv(_csv("seasonality_index")))
     _load_competitor_events(session, pd.read_csv(_csv("competitor_events")))
     _load_segments(session, pd.read_csv(_csv("customer_segments")))
+    if _csv("weather_index").exists():
+        _load_weather_index(session, pd.read_csv(_csv("weather_index")))
 
     session.close()
     logger.info("Database seeding complete.")
