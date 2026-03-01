@@ -94,3 +94,5 @@ models/saved/
 *.h5
 *.pt
 *.onnx
+
+tests/*

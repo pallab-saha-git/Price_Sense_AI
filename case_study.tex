@@ -1,0 +1,598 @@
+\documentclass[11pt, a4paper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage{pifont}  % For checkmarks and x marks
+
+% ── Colours & Styling ─────────────────────────────────────────────────────────
+\definecolor{brand}{HTML}{2563EB}
+\definecolor{accent}{HTML}{F59E0B}
+\definecolor{darktext}{HTML}{1E293B}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=brand,
+    urlcolor=brand,
+    citecolor=brand,
+}
+
+\titleformat{\section}{\Large\bfseries\color{darktext}}{}{0em}{}[\vspace{-0.5em}\rule{\textwidth}{0.4pt}]
+\titleformat{\subsection}{\large\bfseries\color{brand}}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{Price Sense AI}}
+\fancyhead[R]{\small\textcolor{gray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Symbols ───────────────────────────────────────────────────────────────────
+\newcommand{\cmark}{\ding{51}}  % Checkmark
+\newcommand{\xmark}{\ding{55}}  % X mark
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ══════════════════════════════════════════════════════════════════════════════
+% COVER PAGE
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    
+    {\Huge\bfseries\textcolor{darktext}{Price Sense AI}}\\[1cm]
+    {\LARGE\textcolor{brand}{Case Study Write-Up}}\\[2cm]
+    {\Large AI-Powered Promotion Intelligence\\[0.3cm] for Mid-Market Retailers}\\[3cm]
+    
+    \begin{flushleft}
+    \large
+    \textbf{Submitted by:}\\[0.5cm]
+    Pallab Saha\\[0.3cm]
+    \href{mailto:pallabsongeet007@gmail.com}{pallabsongeet007@gmail.com}\\[0.3cm]
+    +91 9062251052\\[1cm]
+    
+    \textbf{Challenge:}\\[0.3cm]
+    24-hour prototype build + technical write-up\\[1cm]
+    
+    \textbf{Repository:}\\[0.3cm]
+    \url{https://github.com/pallab-saha-git/Price_Sense_AI}
+    \end{flushleft}
+    
+    \vfill
+    {\large March 2026}
+\end{titlepage}
+
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{How Did You Decide the Features in Your POC?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The feature set was driven by a single user question: \textbf{``Should I run this promotion?''} Every feature exists only if it contributes to answering that question with data instead of gut feel.
+
+\subsection{Discovery Process}
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Persona mapping.} I identified three core users---Category Manager (decides which products to promote), Merchandising VP (approves the promo calendar), and Pricing/Finance Analyst (measures ROI post-hoc). Each persona has a distinct question: ``Is 25\% off better than 20\%?'', ``What's the portfolio-level impact?'', and ``What was the real incremental profit?'' respectively.
+
+    \item \textbf{Decision decomposition.} Answering ``should I promote?'' requires five quantitative sub-answers:
+    \begin{itemize}[leftmargin=1em]
+        \item How much extra volume will I sell? $\rightarrow$ \textit{Price elasticity model}
+        \item What would sales be without the promo? $\rightarrow$ \textit{Demand baseline forecast}
+        \item Which related products will lose sales? $\rightarrow$ \textit{Cannibalization model}
+        \item Will I actually make money? $\rightarrow$ \textit{Full P\&L calculator}
+        \item How confident should I be? $\rightarrow$ \textit{Composite risk scorer}
+    \end{itemize}
+    These five models became the analytical engine. Nothing more was added to avoid scope creep.
+
+    \item \textbf{Horizontal design constraint.} The POC must not be hardcoded to a single category. The product hierarchy was abstracted to Category $\rightarrow$ Subcategory $\rightarrow$ Brand $\rightarrow$ SKU (size/variant), which works equally for nuts, beverages, grocery/CPG, or any retail vertical.
+
+    \item \textbf{What was deliberately excluded.} Real-time POS integration, multi-user collaboration, custom reporting, and vendor-deal management were all deferred. They are production features that add complexity without strengthening the core ``should I promote?'' answer.
+\end{enumerate}
+
+\subsection{Feature Prioritisation (MoSCoW)}
+
+\begin{tabularx}{\textwidth}{| l | X |}
+    \hline
+    \textbf{Priority} & \textbf{Features} \\
+    \hline\hline
+    Must & Promotion analyser (5-model pipeline), recommendation card, scenario comparison, product catalog \\
+    \hline
+    Should & AI-generated narrative insights, dashboard KPIs, authentication \\
+    \hline
+    Could & Profit opportunity scanner (catalog-wide screening), async AI insight polling \\
+    \hline
+    Won't (now) & Real-time POS, multi-tenant, vendor deal management \\
+    \hline
+\end{tabularx}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{How Did You Go About Creating the Product?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Phase 1: Foundation \& Data Architecture}
+\begin{itemize}[leftmargin=1.5em]
+    \item Defined the project scope and problem decomposition: broke ``should I promote?'' into 5 quantitative sub-questions (elasticity, baseline demand, cannibalization, profit, risk).
+    \item Designed the data model: 8 SQLAlchemy ORM tables covering products, stores, sales, promotions, calendar events, seasonality, customer segments, and competitor events.
+    \item \textbf{Dataset selection decision:} Chose synthetic data as primary with dunnhumby as secondary real-data option (see Section~\ref{sec:dataset-choice}).
+    \item \textbf{Model architecture decision:} Selected classical statistical models over deep learning (see Section~\ref{sec:model-choice}).
+    \item Built the synthetic data generator producing realistic retail patterns:
+    \begin{itemize}
+        \item 15 SKUs (9 nuts + 6 beverages) $\times$ 25 stores $\times$ 104 weeks
+        \item Embedded seasonality: Diwali $\times$3.0, Christmas $\times$2.5, summer beverages $\times$1.8
+        \item Cross-elasticity coefficients: Pistachios 16oz $\leftrightarrow$ Almonds 16oz = 0.85 substitution
+        \item 60 historical promotions with realistic discount depths (10--35\%)
+        \item Calendar events: 15 major retail events (Black Friday, Diwali, Lunar New Year, etc.)
+        \item Weather index: seasonal patterns (summer_multiplier, winter_multiplier)
+        \item Customer segments: 3 personas (price-sensitive, loyalist, occasional) per store
+        \item Competitor events: synthetic competitive promo activity per category
+    \end{itemize}
+    \item Set up SQLite database with WAL mode and seed pipeline.
+\end{itemize}
+
+\subsection{Phase 2: Analytical Engine}
+\begin{itemize}[leftmargin=1.5em]
+    \item Implemented all five statistical models:
+    \begin{enumerate}
+        \item \textbf{Elasticity:} Log-log OLS regression with seasonality (sin/cos week encoding), trend controls, and category-level fallback defaults calibrated to published retail benchmarks.
+        \item \textbf{Demand Forecast:} Prophet $\rightarrow$ SARIMAX $\rightarrow$ Moving Average cascade with holiday effects and seasonality multipliers.
+        \item \textbf{Cannibalization:} Cross-elasticity regression with dynamic fallbacks based on category/subcategory proximity.
+        \item \textbf{Profit Calculator:} Full P\&L model computing baseline vs.~promo revenue/margin, incremental profit, ROI, with forward-buy adjustment support.
+        \item \textbf{Risk Scorer:} 6-factor composite (elasticity confidence, data recency, cannibalization breadth, discount depth history, seasonal anomaly risk, category volatility).
+    \end{enumerate}
+    \item Built the service orchestration layer (\texttt{promo\_analyzer.py}) that calls all five models in sequence and returns a unified \texttt{PromoAnalysisResult}.
+    \item Added the scenario engine for multi-discount comparison, optimised to compute elasticity/forecast once and reuse across discount levels.
+\end{itemize}
+
+\subsection{Phase 3: UI \& Intelligence Layer}
+\begin{itemize}[leftmargin=1.5em]
+    \item Built all Dash pages: Dashboard (KPI overview + trend charts), Analyze (promo input form + recommendation card), Compare (multi-scenario table), Catalog (product browser + promo history), and Profit Opportunities (catalog-wide screening).
+    \item Created reusable UI components: recommendation card, elasticity chart, cannibalization heatmap, risk gauge, insight panel, scenario table.
+    \item Implemented dual-mode insight generation:
+    \begin{itemize}
+        \item Template-based (deterministic, instant, always works)
+        \item OpenRouter LLM integration with 8-model fallback chain, token-bucket rate limiter, circuit breakers for auth/billing failures, and async background polling
+    \end{itemize}
+    \item Added authentication: Flask sessions, CSRF protection (dual guard for SPA routing), bcrypt password hashing, admin seeding, registration controls.
+\end{itemize}
+
+\subsection{Phase 4: Polish, Testing \& Deployment}
+\begin{itemize}[leftmargin=1.5em]
+    \item Wrote unit tests for all five models, service orchestration, insight generation, auth, and data layer.
+    \item Built Docker image with Prophet/CmdStan pre-compilation, Gunicorn config, non-root user, and \texttt{docker-compose.yml} for one-command deployment.
+    \item Added dunnhumby real-data loader as a secondary data path (auto-detects zip files in \texttt{data/zip/}).
+    \item End-to-end testing across all pages and edge cases (insufficient data, missing SKUs, extreme discounts, rate limiting, Prophet unavailability).
+    \item Created comprehensive documentation (README, project outline, inline docstrings).
+\end{itemize}
+
+\subsection{AI as a Development Partner}
+Throughout the build, AI (GitHub Copilot / Claude) was used as a pair-programming partner for:
+\begin{itemize}[leftmargin=1.5em]
+    \item Scaffolding boilerplate (ORM models, callback registration, Dockerfile)
+    \item Validating statistical methodology (elasticity estimation, cross-elasticity interpretation)
+    \item Debugging edge cases (Prophet installation on Windows, SQLite WAL mode, CSRF in single-page apps)
+    \item Code review and refactoring suggestions
+\end{itemize}
+The product and architectural decisions were human-driven; AI accelerated execution.
+
+\vspace{1em}
+
+\subsection{Dataset Choice Rationale}\label{sec:dataset-choice}
+
+The prototype uses \textbf{synthetic data as primary} with \textbf{dunnhumby as optional real data}. This decision was deliberate, not a shortcut.
+
+\subsubsection{Why Synthetic Data for the Core Demo?}
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Controllability.} Embedded cross-elasticity coefficients (e.g., Pistachios 16oz $\leftrightarrow$ Almonds 16oz = 0.85) and seasonality multipliers (Diwali $\times$3.0, summer beverages $\times$1.8) ensure models produce plausible, story-aligned outputs. Random data produces flat, implausible results.
+    
+    \item \textbf{Zero-barrier demo.} No download, no registration, no API keys. \texttt{python app.py} works immediately. Real datasets require manual download steps that break evaluator flow.
+    
+    \item \textbf{Category alignment.} Synthetic data is designed around the reference customer (specialty nuts retailer). dunnhumby has grocery departments but not explicit ``Salted Pistachios 16oz''---it requires mapping commodity codes.
+    
+    \item \textbf{Speed.} 15 SKUs $\times$ 25 stores $\times$ 104 weeks = 39K rows loads in $<$1 second. dunnhumby Complete Journey (2.6M transactions) takes 5--8 seconds to process.
+\end{enumerate}
+
+\subsubsection{Why dunnhumby Was Selected as Real Data Option?}
+
+When real data \textit{is} needed (e.g., to validate model behavior on actual retail patterns), dunnhumby ``The Complete Journey'' is the only public dataset that provides all three critical features simultaneously:
+
+\begin{tabularx}{\textwidth}{| l | c | c | c | X |}
+    \hline
+    \textbf{Dataset} & \textbf{Promo Flags} & \textbf{Basket Data} & \textbf{Pricing} & \textbf{Verdict} \\
+    \hline\hline
+    dunnhumby & \textcolor{green}{\cmark} & \textcolor{green}{\cmark} & \textcolor{green}{\cmark} & \textbf{SELECTED} --- Only dataset with all 3 signals for elasticity + cannibalization \\
+    \hline
+    Walmart Sales & \textcolor{orange}{\~{}} & \textcolor{red}{\xmark} & \textcolor{orange}{\~{}} & Aggregated store-week level, no SKU cross-effects visible \\
+    \hline
+    Corp. Favorita & \textcolor{green}{\cmark} & \textcolor{red}{\xmark} & \textcolor{green}{\cmark} & 125M rows, overkill for 24-hour build; no basket composition \\
+    \hline
+    Instacart & \textcolor{red}{\xmark} & \textcolor{green}{\cmark} & \textcolor{red}{\xmark} & No pricing data = cannot estimate elasticity \\
+    \hline
+\end{tabularx}
+
+\textbf{The critical difference:} dunnhumby provides \texttt{basket\_id} (multiple rows = same shopping trip), which enables cannibalization detection. When a customer buys Pistachios instead of Almonds in the same trip where Pistachios are on promo, that's observable substitution. No other public dataset has this.
+
+Additionally:
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{causal\_data.csv} contains per-product per-week flags for \texttt{display} (endcap placement), \texttt{feature} (flyer ad), and \texttt{temp\_price\_reduction}---explicit promo indicators.
+    \item \texttt{hh\_demographic.csv} provides household-level age, income, family size---enables customer segmentation.
+    \item 2 years of data (711 days) is sufficient for seasonal pattern detection without being unwieldy.
+\end{itemize}
+
+\subsubsection{Implementation}
+
+The app auto-detects dunnhumby zip files in \texttt{data/zip/} at startup and loads them if present. Otherwise, it falls back to synthetic data. This design ensures:
+\begin{itemize}[leftmargin=1.5em]
+    \item Evaluators can run the demo instantly without downloads.
+    \item Technical reviewers can validate model behavior on real retail patterns by placing the zip file and restarting.
+\end{itemize}
+
+\vspace{1em}
+
+\subsection{Model Architecture Choice}\label{sec:model-choice}
+
+\subsubsection{Why Prophet/SARIMAX Instead of TensorFlow/PyTorch?}
+
+The demand forecasting model uses \textbf{Prophet $\rightarrow$ SARIMAX $\rightarrow$ Moving Average cascade}, not neural networks. This was a deliberate technical decision, not a skill limitation.
+
+\begin{tabularx}{\textwidth}{| p{3.5cm} | p{3.5cm} | X |}
+    \hline
+    \textbf{Criterion} & \textbf{Prophet/ SARIMAX} & \textbf{TensorFlow/ PyTorch (LSTM)} \\
+    \hline\hline
+    Training data & 12--52 weeks per SKU & 1000+ weeks per SKU \\
+    \hline
+    Interpret- ability & Explicit trend + seasonality + holidays & Black-box embeddings \\
+    \hline
+    Cold-start & Category fallbacks work instantly & Requires extensive training data \\
+    \hline
+    Inference speed & $<$100ms per SKU & 200--500ms+ (GPU needed) \\
+    \hline
+    Footprint & 50 MB, pure Python & 500 MB+, CUDA/cuDNN \\
+    \hline
+    Degradation & Prophet $\rightarrow$ SARIMAX $\rightarrow$ MA & Fails if training didn't converge \\
+    \hline
+    Domain fit & Designed for business forecasting & General-purpose, needs custom features \\
+    \hline
+    Overfitting risk & Low (regularised) & High (memorises sparse data) \\
+    \hline
+\end{tabularx}
+
+\textbf{Key reasons for Prophet:}
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Explicit seasonality + holiday modeling.} Prophet's \texttt{holidays} parameter directly accepts a DataFrame of retail events (Black Friday, Diwali, Christmas). Neural networks require manual one-hot encoding and extensive hyperparameter tuning to learn these patterns.
+    
+    \item \textbf{Interpretable decomposition.} Prophet outputs separate components: trend, yearly seasonality, weekly seasonality, holiday effects. A merchant can see ``+30\% from Diwali, +8\% from display effect''. LSTM outputs are opaque vectors.
+    
+    \item \textbf{Robust to missing data.} Retail data has gaps (stores closed, SKUs out of stock, partial promo weeks). Prophet handles missing observations natively. Neural networks require imputation strategies that introduce bias.
+    
+    \item \textbf{Deployment simplicity.} Prophet is pure Python (uses Stan for MCMC internally, but that's bundled). No GPU, no TensorFlow Serving, no ONNX export. Runs on any laptop or Docker container.
+    
+    \item \textbf{24-hour build constraint.} Training and debugging LSTM/Transformers would consume 6--8 hours (architecture search, hyperparameter tuning, convergence debugging). Prophet works out-of-the-box with sensible defaults.
+\end{enumerate}
+
+\subsubsection{Why SARIMAX as Fallback?}
+
+SARIMAX (Seasonal ARIMA with eXogenous regressors) from \texttt{statsmodels} is the second tier in the cascade:
+\begin{itemize}[leftmargin=1.5em]
+    \item Zero installation --- \texttt{statsmodels} is pure Python, no binary dependencies.
+    \item Works when Prophet is unavailable (Windows C++ toolchain issues).
+    \item Provides seasonal decomposition (though less flexible than Prophet's additive components).
+    \item Standard econometrics tool---familiar to retail analysts.
+\end{itemize}
+
+\subsubsection{When Would Neural Networks Be Appropriate?}
+
+Deep learning becomes viable at production scale when:
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{Large catalog:} 10,000+ SKUs with 3+ years of history each. Transformers can learn cross-SKU patterns.
+    \item \textbf{Real-time external signals:} Weather API, competitor pricing scrapes, social media sentiment. Neural networks excel at multimodal fusion.
+    \item \textbf{Accuracy gains justify complexity:} Benchmarks show $<$5\% MAPE improvement over Prophet for typical retail data. Not worth 10$\times$ deployment complexity for MVP.
+\end{itemize}
+
+For this 24-hour prototype, classical time series methods are the correct engineering choice.
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Technical Architecture \& How It Changes with Scale}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\vspace{1.5em}
+
+\subsection{Current MVP Architecture}
+
+{\small
+\begin{verbatim}
+┌──────────────────────────────────────────────────────────┐
+│              Browser (Dash SPA)                          │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         ↓
+┌──────────────────────────────────────────────────────────┐
+│       Dash / Flask (app.py + Gunicorn WSGI)              │
+│  ┌──────────┐  ┌────────────┐  ┌─────────────────┐      │
+│  │  Pages   │  │ Callbacks  │  │  Auth (Flask    │      │
+│  │(layouts) │  │  (logic)   │  │ sessions+CSRF)  │      │
+│  └────┬─────┘  └─────┬──────┘  └─────────────────┘      │
+│       └──────────────┼──────────────────┐                │
+│                      ↓                  │                │
+│  ┌───────────────────────────────────────┴─────────────┐ │
+│  │     Service Layer (promo_analyzer.py)               │ │
+│  │  Orchestrates: Elasticity → Forecast →              │ │
+│  │  Cannibalization → P&L → Risk → Insights            │ │
+│  └──────────────────────┬──────────────────────────────┘ │
+│                         ↓                                │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │   Model Layer (5 statistical models)             │   │
+│  │  • Elasticity (log-log OLS + seasonality)        │   │
+│  │  • Demand Forecast (Prophet/SARIMAX/MA cascade)  │   │
+│  │  • Cannibalization (cross-elasticity regression) │   │
+│  │  • Profit Calculator (full P&L with ROI)         │   │
+│  │  • Risk Scorer (6-factor composite)              │   │
+│  └──────────────────────┬───────────────────────────┘   │
+│                         ↓                                │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │   Data Layer (SQLAlchemy ORM + SQLite)           │   │
+│  │  • 8 tables: products, stores, sales, promotions,│   │
+│  │    calendar_events, seasonality, segments, etc.  │   │
+│  │  • In-memory pandas cache (sub-2s response)      │   │
+│  └──────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────┘
+                         ↕
+          ┌─────────────────────────────┐
+          │ OpenRouter API (optional)   │
+          │  8-model fallback chain     │
+          │  for NL insights            │
+          └─────────────────────────────┘
+\end{verbatim}
+}
+
+\textbf{Key MVP choices:}
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{SQLite} --- zero installation, file-based, sufficient for single-user demo.
+    \item \textbf{In-memory pandas cache} --- all data loaded once at startup for sub-2s response times.
+    \item \textbf{Synchronous model execution} --- all 5 models run in-process, sequentially.
+    \item \textbf{Dash (Plotly)} --- pure Python, no React/JS required, same code MVP $\rightarrow$ prod.
+\end{itemize}
+
+\subsection{Data Features \& Intelligence Inputs}
+
+The models leverage extensive contextual data to produce realistic, defensible recommendations:
+
+\begin{tabularx}{\textwidth}{| l | X |}
+    \hline
+    \textbf{Feature Category} & \textbf{Implementation Details} \\
+    \hline\hline
+    Seasonality & \textbullet\, Sin/cos week-of-year encoding \newline \textbullet\, Pre-computed \texttt{seasonality\_index} table with per-SKU multipliers \newline \textbullet\, \texttt{is\_seasonal} flag + \texttt{peak\_seasons} JSON array \\
+    \hline
+    Calendar Events & \textbullet\, 15 retail events (Black Friday, Diwali, Christmas, etc.) \newline \textbullet\, Intensity ratings (1--5) + category tags \newline \textbullet\, Stored in \texttt{calendar\_events} table \newline \textbullet\, Used as Prophet \texttt{holidays} parameter \\
+    \hline
+    Weather Impact & \textbullet\, \texttt{weather\_index} table with seasonal multipliers \newline \textbullet\, Open-Meteo API integration (free, no key) \newline \textbullet\, Fallback to hardcoded averages \newline \textbullet\, Beverages: +1.8$\times$ summer lift \\
+    \hline
+    Customer Segments & \textbullet\, 3 personas: price-sensitive, loyalist, occasional \newline \textbullet\, Fields: \texttt{avg\_basket\_size}, \texttt{promo\_response\_multiplier}, \texttt{loyalty\_score} \newline \textbullet\, Stored per-store in \texttt{customer\_segments} \\
+    \hline
+    Competitor Activity & \textbullet\, \texttt{competitor\_events} table (~5 events/category/year) \newline \textbullet\, Synthetic promo dates + intensity \newline \textbullet\, Explains variance in historical promo performance \\
+    \hline
+    Cross-Elasticity & \textbullet\, Hardcoded substitution coefficients for within-category pairs \newline \textbullet\, Dynamic fallback: same subcat = 0.22, same cat = 0.14, cross-cat = 0.0 \newline \textbullet\, Enables realistic cannibalization heatmaps \\
+    \hline
+    Store Geography & \textbullet\, 25 stores across 4 regions (NE, SE, MW, W) \newline \textbullet\, Fields: \texttt{channel}, \texttt{size\_tier}, \texttt{avg\_weekly\_footfall} \newline \textbullet\, Allows region-specific elasticity estimation \\
+    \hline
+    Product Hierarchy & \textbullet\, Structure: Category $\rightarrow$ Subcategory $\rightarrow$ Brand $\rightarrow$ SKU \newline \textbullet\, Category-level defaults: Nuts = $-2.0$, Beverages = $-2.2$, Grocery = $-1.5$ \newline \textbullet\, Used when item-level data is sparse \\
+    \hline
+    Promotion History & \textbullet\, 60 historical promotions in \texttt{promotions} table \newline \textbullet\, Fields: \texttt{discount\_pct}, \texttt{promo\_type}, \texttt{units\_sold}, \texttt{revenue} \newline \textbullet\, Risk scorer checks if discount is within tested range \\
+    \hline
+    Margin \& Cost Data & \textbullet\, Per-SKU fields: \texttt{regular\_price}, \texttt{cost\_price}, \texttt{margin\_pct} \newline \textbullet\, Enables full P\&L calculation \newline \textbullet\, Outputs: baseline/promo margin, incremental profit, ROI \\
+    \hline
+\end{tabularx}
+
+\textbf{Why this matters:} A promotion recommendation that ignores seasonality (e.g., predicting the same lift for Pistachios in July vs.~November) is implausible. Real retailers know Diwali drives 3$\times$ baseline for nuts. Embedding these patterns into synthetic data ensures the model outputs align with domain expertise.
+
+\subsection{Production Architecture at Scale}
+
+\begin{tabularx}{\textwidth}{| l | l | X |}
+    \hline
+    \textbf{Component} & \textbf{MVP} & \textbf{Production} \\
+    \hline\hline
+    Database        & SQLite (file)           & PostgreSQL (managed, e.g.\ AWS RDS). One config line change. \\
+    \hline
+    Cache           & In-process pandas       & Redis --- shared across workers, survives restarts. \\
+    \hline
+    Task queue      & Synchronous             & Celery + Redis --- model inference is async, non-blocking. \\
+    \hline
+    ML models       & Statsmodels + Prophet   & Same, plus periodic offline retraining via Airflow/Prefect. \\
+    \hline
+    Auth            & Flask sessions (cookie) & OAuth 2.0 / SSO (Okta, Azure AD) for enterprise. \\
+    \hline
+    Deployment      & Docker (single node)    & Kubernetes (EKS/GKE) with horizontal pod autoscaling. \\
+    \hline
+    AI insights     & OpenRouter (free tier)  & OpenAI API or self-hosted LLM behind a gateway. \\
+    \hline
+    Monitoring      & Loguru (stdout)         & Datadog / Prometheus + Grafana. ML model drift tracking. \\
+    \hline
+    CI/CD           & Manual                  & GitHub Actions $\rightarrow$ Docker build $\rightarrow$ deploy to K8s. \\
+    \hline
+    Multi-tenancy   & Single user             & Row-level security in Postgres, tenant isolation. \\
+    \hline
+\end{tabularx}
+
+The critical insight: the \textbf{application code barely changes}. The models, service layer, and UI are the same. What changes is infrastructure wiring---database URL, cache backend, task runner, and auth provider.
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{What Challenges Did You Face?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Prophet installation on Windows.} Prophet requires CmdStan, which expects a C++ toolchain. The standard \texttt{pip install prophet} fails on most Windows setups. I resolved this with a Docker build that pre-installs CmdStan into Prophet's internal path, plus a model cascade (Prophet $\rightarrow$ SARIMAX $\rightarrow$ Moving Average) so the app degrades gracefully when Prophet is unavailable locally.
+
+    \item \textbf{Making simulated data feel real.} Purely random synthetic data produces implausible elasticity estimates and flat cannibalization signals. I embedded cross-elasticity coefficients directly into the synthetic generator (e.g.\ Pistachios 16oz $\leftrightarrow$ Almonds 16oz: 0.85 substitution multiplier) and layered realistic seasonality (Diwali $\times$3.0 for nuts, summer $\times$1.8 for beverages). This ensures the models produce plausible outputs that tell a coherent story during a demo.
+
+    \item \textbf{CSRF in a single-page app.} Dash uses HTML5 client-side routing, so clicking nav links never hits Flask's \texttt{before\_request} middleware. I had to implement a dual auth guard: server-side (Flask \texttt{before\_request} for direct URL access) plus a client-side Dash callback that monitors URL changes and forces a redirect to \texttt{/login} when the session is unauthenticated.
+
+    \item \textbf{AI insight rate limiting.} Free-tier LLM APIs (OpenRouter) have aggressive rate limits ($\sim$8 requests/60s). Multiple rapid analyses would fail. I implemented a token-bucket rate limiter, an automatic model fallback chain (8 free models tried sequentially), circuit breakers for permanent auth/billing failures, and a temporary cooldown circuit for upstream 429 responses.
+
+    \item \textbf{Elasticity estimation with sparse data.} Many SKUs in both synthetic and dunnhumby datasets have limited price variation, causing OLS to produce unreliable coefficients. I added category-level default elasticities (calibrated to published US grocery benchmarks from Hoch et al.\ 1995), data quality flags (\texttt{good}/\texttt{limited}/\texttt{insufficient}), and transparent communication in the UI when confidence is low.
+
+    \item \textbf{Balancing fidelity vs.\ demo speed.} Running 5 models $\times$ 6 discount levels for scenario comparison would take 10+ seconds. I optimised the scenario engine to compute elasticity and demand forecast once (they're discount-independent) and only re-run P\&L, cannibalization, and risk per scenario, cutting response time to $\sim$2--3 seconds.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{What Else Would You Add Given More Time?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Promotion calendar view.} A Gantt-style calendar showing all planned promotions with overlap detection and portfolio-level margin impact. The VP Merchandising persona needs this to approve a full quarter's promo slate, not just one-off analyses.
+
+    \item \textbf{Vendor deal integration.} Most retail promos are vendor-funded (the brand pays for the discount). Adding a ``vendor contribution'' field to the P\&L would flip many ``NOT RECOMMENDED'' promos to ``RECOMMENDED'' and make the tool immediately more realistic.
+
+    \item \textbf{A/B test tracking.} Connect actual post-promo results back to the prediction. Show accuracy over time (``Our model predicted +38\% lift; actual was +41\%''). This builds trust and creates a feedback loop that improves the models.
+
+    \item \textbf{Alerting \& notifications.} Push alerts when a competitor drops price on a category you're planning to promote, or when a planned promo's risk score shifts due to new data.
+
+    \item \textbf{Multi-tenant SaaS architecture.} Row-level security, tenant-specific model parameters, and a self-service onboarding flow for new retailers.
+
+    \item \textbf{Explainability layer.} SHAP-style feature attribution showing \textit{why} the model predicts a +42\% lift (e.g.\ ``30\% from price sensitivity, 8\% from seasonal demand, 4\% from display effect'').
+
+    \item \textbf{Store-level recommendations.} Instead of chain-wide, rank which stores should run a particular promotion based on local elasticity, demographics, and competitive density.
+
+    \item \textbf{Export \& reporting.} PDF/Excel export of analysis results for offline sharing in merchant review meetings.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Anything Else Worth Sharing}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Design Philosophy}
+The prototype follows a ``simulate the intelligence, not the interface'' principle. Rather than building a flashy UI over random numbers, effort was concentrated on making the \textit{analytical outputs} realistic and internally consistent:
+
+\begin{itemize}[leftmargin=1.5em]
+    \item Elasticity estimates use real statistical methods (log-log OLS with seasonality controls) grounded in published retail research.
+    \item Cannibalization uses cross-elasticity regression with dynamic fallbacks based on category/subcategory proximity---not arbitrary percentages.
+    \item Risk scoring is a weighted composite of six explicit factors, each with a transparent description shown in the UI.
+    \item Recommendations have clear tiers (RECOMMENDED / MARGINAL / NOT\_RECOMMENDED / INSUFFICIENT\_DATA) with economic logic behind each threshold.
+    \item When data is insufficient, the system says so honestly rather than showing overconfident numbers.
+\end{itemize}
+
+This means an evaluator (or a merchant in a demo) can probe any number and get a defensible explanation, which is what separates a POC from a mockup.
+
+\subsection{Graceful Degradation}
+Every external dependency has a fallback:
+
+\begin{tabularx}{\textwidth}{| l | l | X |}
+    \hline
+    \textbf{Dependency} & \textbf{Primary} & \textbf{Fallback} \\
+    \hline\hline
+    Demand forecasting & Prophet & SARIMAX $\rightarrow$ Moving Average \\
+    \hline
+    AI insights        & OpenRouter LLM (8-model chain) & Deterministic templates \\
+    \hline
+    Dataset            & dunnhumby real data & Synthetic generator (auto) \\
+    \hline
+    Database           & PostgreSQL (prod) & SQLite (MVP, zero-install) \\
+    \hline
+\end{tabularx}
+
+The app runs fully offline with zero API keys and zero external dependencies beyond Python packages.
+
+\subsection{Code Quality}
+\begin{itemize}[leftmargin=1.5em]
+    \item Comprehensive docstrings with parameter descriptions on every module and public function.
+    \item Unit tests covering all five models, service orchestration, insight generation, auth, and data layer.
+    \item Structured logging (Loguru) with context-rich messages for debugging.
+    \item Environment-driven configuration with production safety checks (e.g.\ blocking default \texttt{SECRET\_KEY} in non-debug mode).
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Prototype \& Submission}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{tabularx}{\textwidth}{| l | X |}
+    \hline
+    \textbf{Artifact} & \textbf{Link / Location} \\
+    \hline\hline
+    Repository    & \url{https://github.com/pallab-saha-git/Price_Sense_AI} \\
+    \hline
+    Deployed link & \textit{Not deployed --- runs locally only} \\
+    \hline
+    Local run     & See instructions below \\
+    \hline
+\end{tabularx}
+
+\subsection{Running the Application Locally}
+
+\textbf{Step 1: Clone the repository}
+\begin{verbatim}
+git clone https://github.com/pallab-saha-git/Price_Sense_AI
+cd Price_Sense_AI
+\end{verbatim}
+
+\textbf{Step 2: Run the setup script (Windows)}
+\begin{verbatim}
+setup.bat
+\end{verbatim}
+This creates a virtual environment, installs all Python dependencies, generates synthetic data, and seeds the database.
+
+\textbf{Step 3: Start the application}
+\begin{verbatim}
+python app.py
+\end{verbatim}
+Open \texttt{http://localhost:8050} in your browser. You will be redirected to \texttt{/login}. Log in with the admin credentials set in \texttt{.env} (or use the defaults if running for the first time).
+
+\vspace{1em}
+\subsection{Running with Docker}
+
+\textbf{Alternative: Docker Compose (all platforms)}
+\begin{verbatim}
+docker compose up --build
+\end{verbatim}
+This builds the Docker image, installs all dependencies (including Prophet/CmdStan), generates synthetic data, seeds the database, and starts the application. Open \texttt{http://localhost:8050} when ready.
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Major Assumptions}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Promotional elasticity $\approx$ 2$\times$ regular elasticity.} Based on Blattberg, Briesch \& Fox (1995): temporary price reductions generate 2--3$\times$ the volume response of permanent price changes, due to urgency, display effects, and reference-price anchoring.
+
+    \item \textbf{Category-level default elasticities} are used when item-level OLS has insufficient price variation. Values are calibrated to published US grocery benchmarks (Hoch et al.\ 1995): Nuts $= -2.0$, Beverages $= -2.2$, Grocery $= -1.5$, etc.
+
+    \item \textbf{Cross-category cannibalization is negligible.} Promoting Pistachios does not materially affect Beverage sales. Cannibalization is only modelled within-category (same category, same/adjacent subcategory).
+
+    \item \textbf{Volume lift is capped at 80\%.} This prevents implausible forecasts from extreme elasticity $\times$ deep discount combinations. Real-world promotions rarely exceed 80\% incremental lift.
+
+    \item \textbf{Cost prices are synthetic.} Neither the dunnhumby dataset nor the synthetic data contains real cost-of-goods. A category-specific margin percentage (typically 40--55\%) is applied to generate plausible cost prices.
+
+    \item \textbf{Single-week promotional granularity.} Sales data is aggregated to weekly level. Daily or hourly effects (e.g.\ weekend vs.\ weekday response) are not modelled.
+
+    \item \textbf{Forward-buy (pantry loading) is conservatively set to 0\% by default.} The model supports a forward-buy factor that reduces net incremental volume, but it is disabled unless explicitly enabled, to avoid underestimating lift in the demo.
+
+    \item \textbf{The prototype is designed for a solo evaluator} (single-user, single-node). Multi-user concurrency, tenant isolation, and horizontal scaling are documented as production-phase changes, not POC requirements.
+
+    \item \textbf{AI-generated insights are supplementary, not authoritative.} The LLM-generated narrative adds readability but all quantitative recommendations are driven by deterministic models. If the LLM is unavailable, the product is fully functional with template-based insights.
+\end{enumerate}
+
+
+\vspace{2em}
+\begin{center}
+    \rule{0.5\textwidth}{0.4pt}\\[6pt]
+    {\small\textcolor{gray}{Price Sense AI --- Built with Dash, Python, and AI partnership.}}\\
+    {\small\textcolor{gray}{Powered by Trinamix.}}
+\end{center}
+
+\end{document}
