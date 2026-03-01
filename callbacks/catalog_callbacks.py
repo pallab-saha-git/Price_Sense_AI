@@ -10,7 +10,7 @@ import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 import plotly.express as px
 import pandas as pd
-from dash import Input, Output, html, dcc
+from dash import Input, Output, State, html, dcc, ctx
 from loguru import logger
 
 
@@ -26,33 +26,100 @@ def register(app):
         try:
             data = _load_data()
             cats = sorted(data["products"]["category"].dropna().unique())
-
             opts = [{"label": "All Categories", "value": "ALL"}]
             for c in cats:
                 opts.append({"label": c, "value": c})
             return opts
         except Exception as exc:
             logger.error(f"populate_catalog_categories error: {exc}")
-            return [{"label": "All", "value": "ALL"}]
+            return [{"label": "All Categories", "value": "ALL"}]
+
+    # ── Populate Product filter when category changes ────────────────────────
+    @app.callback(
+        Output("dd-product-filter", "options"),
+        Output("dd-product-filter", "value"),
+        Input("dd-cat-filter",      "value"),
+    )
+    def populate_product_options(category):
+        from services.promo_analyzer import _load_data
+        try:
+            data = _load_data()
+            df   = data["products"].copy()
+            if category and category != "ALL":
+                df = df[df["category"] == category]
+            subcats = sorted(df["subcategory"].dropna().unique())
+            opts = [{"label": "All Products", "value": "ALL"}]
+            for s in subcats:
+                opts.append({"label": s, "value": s})
+            return opts, "ALL"
+        except Exception as exc:
+            logger.error(f"populate_product_options error: {exc}")
+            return [{"label": "All Products", "value": "ALL"}], "ALL"
+
+    # ── Populate SKU filter when category OR product changes ─────────────────
+    @app.callback(
+        Output("dd-sku-filter", "options"),
+        Output("dd-sku-filter", "value"),
+        Input("dd-cat-filter",     "value"),
+        Input("dd-product-filter", "value"),
+    )
+    def populate_sku_options(category, product):
+        from services.promo_analyzer import _load_data
+        try:
+            data = _load_data()
+            df   = data["products"].copy()
+            if category and category != "ALL":
+                df = df[df["category"] == category]
+            if product and product != "ALL":
+                df = df[df["subcategory"] == product]
+            df = df.sort_values(["subcategory", "size"])
+            opts = [{"label": "All SKUs", "value": "ALL"}]
+            for _, row in df.iterrows():
+                size_label = ""
+                if pd.notna(row.get("size")):
+                    size_label = f" — {int(row['size'])}{row.get('size_unit', '')}"
+                opts.append({
+                    "label": f"{row['subcategory']}{size_label}  [{row['sku_id']}]",
+                    "value": row["sku_id"],
+                })
+            return opts, "ALL"
+        except Exception as exc:
+            logger.error(f"populate_sku_options error: {exc}")
+            return [{"label": "All SKUs", "value": "ALL"}], "ALL"
+
+    # ── Clear all filters — resets category; cascade auto-resets product & SKU ──
+    @app.callback(
+        Output("dd-cat-filter",  "value"),
+        Output("inp-cat-search", "value"),
+        Input("btn-cat-clear",   "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def clear_filters(_):
+        return "ALL", ""
 
     # ── Product grid ──────────────────────────────────────────────────────────
     @app.callback(
-        Output("div-catalog-grid",    "children"),
-        Output("div-promo-history",   "children"),
-        Input("dd-cat-filter",        "value"),
-        Input("inp-cat-search",       "value"),
+        Output("div-catalog-grid",  "children"),
+        Output("div-promo-history", "children"),
+        Input("dd-cat-filter",      "value"),
+        Input("dd-product-filter",  "value"),
+        Input("dd-sku-filter",      "value"),
+        Input("inp-cat-search",     "value"),
     )
-    def update_catalog(category, search_term):
+    def update_catalog(category, product_filter, sku_filter, search_term):
         from services.promo_analyzer import _load_data
         try:
             data        = _load_data()
             products_df = data["products"].copy()
             promos_df   = data["promos"].copy()
-            sales_df    = data["sales"].copy()
 
-            # Filter products
+            # Filter products — Category → Product → SKU cascade
             if category and category != "ALL":
                 products_df = products_df[products_df["category"] == category]
+            if product_filter and product_filter != "ALL":
+                products_df = products_df[products_df["subcategory"] == product_filter]
+            if sku_filter and sku_filter != "ALL":
+                products_df = products_df[products_df["sku_id"] == sku_filter]
             if search_term:
                 products_df = products_df[
                     products_df["product_name"].str.contains(search_term, case=False, na=False)
@@ -68,7 +135,7 @@ def register(app):
             else:
                 hist_df = promos_df[promos_df["sku_id"].isin(sku_ids)].copy()
                 hist_df["product_name"] = hist_df["sku_id"].map(
-                    products_df.set_index("sku_id")["product_name"]
+                    data["products"].set_index("sku_id")["product_name"]
                 )
                 hist_df["discount_pct"] = (hist_df["discount_pct"] * 100).round(0).astype(int).astype(str) + "%"
                 history = _promo_history_table(hist_df)
@@ -92,33 +159,67 @@ def _product_cards(df: pd.DataFrame) -> html.Div:
     if df.empty:
         return html.P("No products found.", className="text-muted")
 
+    # Group by subcategory so variants (8oz / 16oz / 32oz) share one card
+    groups = df.sort_values(["category", "subcategory", "size"]).groupby(
+        ["category", "subcategory"], sort=False
+    )
+
     cards = []
-    for _, row in df.iterrows():
-        cat    = row.get("category", "")
-        color  = _CAT_COLORS.get(cat, "secondary")
-        rp     = float(row.get("regular_price", 0))
-        cp     = float(row.get("cost_price",    0))
-        margin = round((rp - cp) / rp * 100, 1) if rp > 0 else 0.0
+    for (cat, subcat), group in groups:
+        color   = _CAT_COLORS.get(cat, "secondary")
+        brand   = group.iloc[0].get("brand", "")
+        is_seas = group["is_seasonal"].any() if "is_seasonal" in group.columns else False
+
+        # Build one row per SKU variant
+        variant_rows = []
+        for _, row in group.iterrows():
+            rp     = float(row.get("regular_price", 0))
+            cp     = float(row.get("cost_price",    0))
+            margin = round((rp - cp) / rp * 100, 1) if rp > 0 else 0.0
+            size_label = (
+                f"{int(row['size'])}{row.get('size_unit','')}"
+                if pd.notna(row.get("size")) else ""
+            )
+            variant_rows.append(
+                html.Tr([
+                    html.Td(
+                        dbc.Badge(size_label, color="secondary", pill=True, className="me-1"),
+                        style={"width": "60px"},
+                    ),
+                    html.Td(
+                        html.Code(row["sku_id"],
+                                  style={"fontSize": "10px", "color": "#6366f1"}),
+                    ),
+                    html.Td(f"${rp:.2f}", className="text-end fw-semibold"),
+                    html.Td(f"{margin:.0f}%", className="text-end text-muted",
+                            style={"fontSize": "11px"}),
+                ])
+            )
+
         card = dbc.Col(
             dbc.Card(
                 [
                     dbc.CardHeader(
-                        html.Span(cat, className=f"badge bg-{color}"),
+                        dbc.Row([
+                            dbc.Col(html.Span(cat, className=f"badge bg-{color}"), width="auto"),
+                            dbc.Col(
+                                html.Small(brand, className="text-muted"),
+                                width="auto", className="ms-auto pe-0",
+                            ),
+                        ], align="center", className="g-0"),
                     ),
                     dbc.CardBody(
                         [
-                            html.H6(row["product_name"], className="fw-bold mb-1"),
-                            html.P(f"SKU: {row['sku_id']}", className="text-muted mb-1", style={"fontSize": "12px"}),
-                            html.Hr(className="my-1"),
-                            dbc.Row([
-                                dbc.Col([html.Small("Price", className="text-muted d-block"),
-                                         html.Strong(f"${rp:.2f}")], width=6),
-                                dbc.Col([html.Small("Gross Margin", className="text-muted d-block"),
-                                         html.Strong(f"{margin:.0f}%")], width=6),
-                            ]),
+                            html.H6(subcat, className="fw-bold mb-1"),
                             html.Small(
-                                "🗓 Seasonal" if row.get("is_seasonal") else "",
-                                className="text-info mt-1",
+                                "🗓 Seasonal" if is_seas else "",
+                                className="text-info d-block mb-2",
+                            ),
+                            html.Hr(className="my-1"),
+                            dbc.Table(
+                                [html.Tbody(variant_rows)],
+                                size="sm", bordered=False,
+                                className="mb-0 table-striped",
                             ),
                         ],
                         className="p-2",

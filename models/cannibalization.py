@@ -146,13 +146,16 @@ def compute_cannibalization(
         return CannibalizationResult(focal_sku_id=focal_sku_id, discount_pct=discount_pct, impacts=[], total_margin_loss=0.0)
 
     # Baseline weekly volume for each related SKU (non-promo weeks, last 52 weeks)
+    # Sum across stores per date first, THEN average over weeks — consistent with P&L baseline.
     sales_non_promo = sales_df[(sales_df["is_promo"] == False) | (sales_df["is_promo"].isna())]
     recent_sales    = sales_non_promo[
         pd.to_datetime(sales_non_promo["date"]) >= (pd.to_datetime(sales_non_promo["date"]).max() - pd.Timedelta(weeks=52))
     ]
     baseline_weekly = (
-        recent_sales.groupby("sku_id")["units_sold"]
-        .mean()
+        recent_sales.groupby(["sku_id", "date"])["units_sold"]
+        .sum()                    # total across all stores for each week
+        .groupby(level="sku_id")
+        .mean()                   # mean of weekly totals → consistent with forecast baseline
         .to_dict()
     )
 

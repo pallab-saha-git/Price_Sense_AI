@@ -68,13 +68,16 @@ class PromoPnL:
     def recommendation_tier(self) -> str:
         """Promotion tier based on net incremental profit and ROI.
 
-        RECOMMENDED   — positive net profit AND ROI ≥ 1.0x (cleared cost of discount)
-        MARGINAL      — profitable but ROI < 1.0, OR small loss (ROI > -0.15)
-        NOT_RECOMMENDED — net loss deeper than 15% of discount cost
+        RECOMMENDED     — positive net incremental profit (lift revenue exceeds margin erosion)
+        MARGINAL        — small loss: ROI between -0.30 and 0 (worth reviewing)
+        NOT_RECOMMENDED — net loss deeper than 30% of discount cost, not worth running
+
+        Note: ROI ≥ 1.0x means the promo DOUBLED its investment — unrealistic for price
+        promotions in CPG retail. Any positive net_incremental_profit is a win.
         """
-        if self.net_incremental_profit > 0 and self.promo_roi >= 1.0:
+        if self.net_incremental_profit > 0:
             return "RECOMMENDED"
-        elif self.net_incremental_profit > 0 or self.promo_roi > -0.15:
+        elif self.promo_roi >= -0.30:
             return "MARGINAL"
         else:
             return "NOT_RECOMMENDED"

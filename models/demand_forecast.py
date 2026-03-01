@@ -115,7 +115,8 @@ def forecast_baseline(
     if len(weekly) < 20:
         fallback_val = float(weekly["y"].mean()) if len(weekly) > 0 else 100.0
         logger.warning(f"Insufficient non-promo weeks for {sku_id} — using MA fallback")
-        return _fallback_forecast(sku_id, fallback_val, periods)
+        # Pass weekly so the fallback can still compute a seasonality index
+        return _fallback_forecast(sku_id, fallback_val, periods, weekly if len(weekly) > 1 else None)
 
     # Holdout last 8 weeks for MAPE calculation
     holdout = weekly.tail(8)

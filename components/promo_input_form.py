@@ -63,10 +63,26 @@ def promo_input_form(products_df=None, stores_df=None) -> dbc.Card:
                         className="mb-3",
                     ),
 
-                    # Product / SKU — own row
+                    # Product (subcategory) — own row
                     dbc.Row(
                         dbc.Col([
-                            dbc.Label("Product / SKU", html_for="dd-product"),
+                            dbc.Label("Product", html_for="dd-analyze-product"),
+                            dcc.Dropdown(
+                                id="dd-analyze-product",
+                                options=[{"label": "All Products", "value": "ALL"}],
+                                value="ALL",
+                                clearable=False,
+                                placeholder="All Products",
+                                style={"fontSize": "14px"},
+                            ),
+                        ]),
+                        className="mb-3",
+                    ),
+
+                    # SKU — own row
+                    dbc.Row(
+                        dbc.Col([
+                            dbc.Label("SKU", html_for="dd-product"),
                             dcc.Dropdown(
                                 id="dd-product",
                                 options=get_product_options(products_df),

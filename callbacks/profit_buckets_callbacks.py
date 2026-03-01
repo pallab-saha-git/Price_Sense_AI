@@ -45,16 +45,71 @@ def register(app):
             logger.error(f"pb populate categories error: {exc}")
             return [{"label": "All Categories", "value": "ALL"}]
 
+    # ── Populate Product dropdown (cascade from category) ─────────────────────
+    @app.callback(
+        Output("pb-dd-product", "options"),
+        Output("pb-dd-product", "value"),
+        Input("pb-dd-category", "value"),
+    )
+    def populate_pb_products(category):
+        from services.promo_analyzer import _load_data
+        try:
+            data = _load_data()
+            df   = data["products"].copy()
+            if category and category != "ALL":
+                df = df[df["category"] == category]
+            subcats = sorted(df["subcategory"].dropna().unique())
+            opts = [{"label": "All Products", "value": "ALL"}]
+            for s in subcats:
+                opts.append({"label": s, "value": s})
+            return opts, "ALL"
+        except Exception as exc:
+            logger.error(f"pb populate products error: {exc}")
+            return [{"label": "All Products", "value": "ALL"}], "ALL"
+
+    # ── Populate SKU dropdown (cascade from category + product) ───────────────
+    @app.callback(
+        Output("pb-dd-sku", "options"),
+        Output("pb-dd-sku", "value"),
+        Input("pb-dd-category", "value"),
+        Input("pb-dd-product",  "value"),
+    )
+    def populate_pb_skus(category, product):
+        from services.promo_analyzer import _load_data
+        try:
+            data = _load_data()
+            df   = data["products"].copy()
+            if category and category != "ALL":
+                df = df[df["category"] == category]
+            if product and product != "ALL":
+                df = df[df["subcategory"] == product]
+            df = df.sort_values(["subcategory", "size"] if "size" in df.columns else ["subcategory"])
+            opts = [{"label": "All SKUs", "value": "ALL"}]
+            for _, row in df.iterrows():
+                size_label = ""
+                if "size" in row and pd.notna(row.get("size")):
+                    size_label = f" — {int(row['size'])}{row.get('size_unit', '')}"
+                opts.append({
+                    "label": f"{row['subcategory']}{size_label}  [{row['sku_id']}]",
+                    "value": row["sku_id"],
+                })
+            return opts, "ALL"
+        except Exception as exc:
+            logger.error(f"pb populate skus error: {exc}")
+            return [{"label": "All SKUs", "value": "ALL"}], "ALL"
+
     # ── Main scan callback ─────────────────────────────────────────────────────
     @app.callback(
         Output("pb-div-results", "children"),
         Input("pb-btn-scan",      "n_clicks"),
         State("pb-dd-category",  "value"),
+        State("pb-dd-product",   "value"),
+        State("pb-dd-sku",       "value"),
         State("pb-sl-weeks",     "value"),
         State("pb-sl-roi",       "value"),
         prevent_initial_call=True,
     )
-    def run_scan(n_clicks, category, promo_weeks, min_roi):
+    def run_scan(n_clicks, category, product, sku, promo_weeks, min_roi):
         if not n_clicks:
             return html.Div()
 
@@ -70,6 +125,10 @@ def register(app):
 
             if category and category != "ALL":
                 products_df = products_df[products_df["category"] == category]
+            if product and product != "ALL":
+                products_df = products_df[products_df["subcategory"] == product]
+            if sku and sku != "ALL":
+                products_df = products_df[products_df["sku_id"] == sku]
 
             # Estimate elasticity per SKU (reuse cached estimates)
             records = []
@@ -133,6 +192,13 @@ def register(app):
             if min_roi and min_roi > 0:
                 df = df[df["promo_roi"] >= min_roi]
 
+            if df.empty:
+                return dbc.Alert(
+                    f"No SKUs meet the minimum ROI threshold of {min_roi}x. "
+                    "Try lowering the threshold or selecting 'Any'.",
+                    color="warning",
+                )
+
             return _build_results(df, promo_weeks)
 
         except Exception as exc:
@@ -156,9 +222,11 @@ def _build_results(df: pd.DataFrame, promo_weeks: int) -> html.Div:
     )
 
     def _bucket(row):
-        if row["net_profit"] > 0 and row["promo_roi"] >= 1.0:
+        # High Opportunity: positive net profit at optimal discount
+        if row["net_profit"] > 0:
             return "High Opportunity"
-        elif row["net_profit"] > 0 or row["promo_roi"] > -0.15:
+        # Moderate: small negative ROI (between -0.30 and 0) — worth reviewing at lower discount
+        elif row["promo_roi"] >= -0.30:
             return "Moderate"
         else:
             return "Avoid"
@@ -185,7 +253,10 @@ def _build_results(df: pd.DataFrame, promo_weeks: int) -> html.Div:
     # Sort columns numerically
     col_order = [f"{int(d*100)}%" for d in sorted(set(df["discount"].tolist()))]
     pivot = pivot.reindex(columns=[c for c in col_order if c in pivot.columns])
-    pivot = pivot.sort_values(col_order[0] if col_order else pivot.columns[0], ascending=False)
+    # Guard: only sort if pivot is non-empty and has columns
+    if not pivot.empty and len(pivot.columns) > 0:
+        sort_col = col_order[0] if col_order and col_order[0] in pivot.columns else pivot.columns[0]
+        pivot = pivot.sort_values(sort_col, ascending=False)
 
     fig_heat = go.Figure(go.Heatmap(
         z=pivot.values,

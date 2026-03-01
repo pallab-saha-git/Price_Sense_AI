@@ -67,6 +67,26 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
     seg_str     = f"{seg_mult:.2f}x" if seg_mult != 1.0 else "1.00x (all stores)"
     seg_col     = "text-success" if seg_mult >= 1.0 else "text-warning"
 
+    # Scope badge — shows exactly what store/channel scope was analysed
+    channels_used = result.channels_used or ["physical", "online"]
+    ch_label = " + ".join(c.title() for c in sorted(channels_used))
+    store_ids_used = getattr(result, "store_ids_used", None)
+    if store_ids_used:
+        store_label = f"{len(store_ids_used)} store(s): {', '.join(store_ids_used)}"
+    else:
+        store_label = "All Stores"
+    scope_badge = html.Div(
+        [
+            dbc.Badge(f"📍 {store_label}", color="light", text_color="dark", className="me-2"),
+            dbc.Badge(f"📡 {ch_label}", color="light", text_color="dark", className="me-2"),
+            dbc.Badge(
+                f"Baseline: {result.forecast.baseline_weekly:,.0f} units/wk",
+                color="light", text_color="dark",
+            ),
+        ],
+        className="mt-2 mb-1",
+    )
+
     # Alternative suggestion row
     alt_block = html.Div()
     if result.alt_discount_pct and result.alt_pnl:
@@ -120,6 +140,8 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
             # Metrics row
             dbc.CardBody(
                 [
+                    scope_badge,
+                    html.Hr(className="my-2"),
                     dbc.Row(
                         [
                             _metric_col("Volume Lift",          lift_str),

@@ -28,6 +28,8 @@ services:
       OPEN_ROUTER_API_KEY: ${OPEN_ROUTER_API_KEY:-}
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-meta-llama/llama-3.3-70b-instruct:free}
       REGISTRATION_DISABLED: ${REGISTRATION_DISABLED:-false}
+      # Zips already exist in data/zip/ (volume-mounted from host) — skip download
+      SKIP_DOWNLOAD: "1"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050')"]

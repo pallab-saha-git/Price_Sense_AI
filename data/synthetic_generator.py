@@ -442,7 +442,8 @@ def _generate_weather_index() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _generate_calendar_events() -> pd.DataFrame:    """Build CalendarEvents from hardcoded NRF events + holidays package."""
+def _generate_calendar_events() -> pd.DataFrame:
+    """Build CalendarEvents from hardcoded NRF events + holidays package."""
     try:
         import holidays as hols
         us_hols_2024 = hols.US(years=2024)

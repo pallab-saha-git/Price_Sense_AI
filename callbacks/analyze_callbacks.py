@@ -92,33 +92,62 @@ def register(app):
             logger.error(f"populate_category_options error: {exc}")
             return [{"label": "All Categories", "value": "ALL"}]
 
-    # ── Filter product dropdown by category ───────────────────────────────────
+    # ── Populate Product (subcategory) dropdown by category ───────────────────
     @app.callback(
-        Output("dd-product", "options"),
-        Input("dd-category",  "value"),
+        Output("dd-analyze-product", "options"),
+        Output("dd-analyze-product", "value"),
+        Input("dd-category", "value"),
     )
-    def filter_products_by_category(category):
+    def populate_product_options(category):
         from services.promo_analyzer import _load_data
         try:
             data = _load_data()
             df   = data["products"].copy()
             if category and category != "ALL":
                 df = df[df["category"] == category]
+            subcats = sorted(df["subcategory"].dropna().unique())
+            opts = [{"label": "All Products", "value": "ALL"}]
+            for s in subcats:
+                opts.append({"label": s, "value": s})
+            return opts, "ALL"
+        except Exception as exc:
+            logger.error(f"populate_product_options error: {exc}")
+            return [{"label": "All Products", "value": "ALL"}], "ALL"
 
-            # Sort: category A-Z, then product name A-Z
-            df = df.sort_values(["category", "product_name"])
-
+    # ── Populate SKU dropdown by category + product ────────────────────────────
+    @app.callback(
+        Output("dd-product", "options"),
+        Output("dd-product", "value"),
+        Input("dd-category",        "value"),
+        Input("dd-analyze-product", "value"),
+    )
+    def populate_sku_options(category, product):
+        from services.promo_analyzer import _load_data
+        import pandas as _pd
+        try:
+            data = _load_data()
+            df   = data["products"].copy()
+            if category and category != "ALL":
+                df = df[df["category"] == category]
+            if product and product != "ALL":
+                df = df[df["subcategory"] == product]
+            sort_cols = [c for c in ["category", "subcategory", "size"] if c in df.columns]
+            df = df.sort_values(sort_cols) if sort_cols else df
             options = []
             for _, row in df.iterrows():
-                cat  = row.get("category", "")
-                name = row["product_name"]
-                # Show category prefix only when "All Categories" is selected
-                label = f"{name}" if (category and category != "ALL") else f"[{cat}]  {name}"
-                options.append({"label": label, "value": row["sku_id"]})
-            return options
+                size_label = ""
+                if "size" in row and _pd.notna(row.get("size")):
+                    size_label = f" — {int(row['size'])}{row.get('size_unit', '')}"
+                cat_prefix = "" if (category and category != "ALL") else f"[{row.get('category', '')}] "
+                options.append({
+                    "label": f"{cat_prefix}{row['subcategory']}{size_label}  [{row['sku_id']}]",
+                    "value": row["sku_id"],
+                })
+            default_val = options[0]["value"] if options else "NUT-PIST-16"
+            return options, default_val
         except Exception as exc:
-            logger.error(f"filter_products_by_category error: {exc}")
-            return []
+            logger.error(f"populate_sku_options error: {exc}")
+            return [], "NUT-PIST-16"
 
     # ── Main analysis callback ─────────────────────────────────────────────────
     @app.callback(

@@ -56,7 +56,35 @@ def layout() -> html.Div:
                                         style={"fontSize": "14px"},
                                     ),
                                 ],
-                                md=3,
+                                md=2,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("Product"),
+                                    dcc.Dropdown(
+                                        id="pb-dd-product",
+                                        options=[{"label": "All Products", "value": "ALL"}],
+                                        value="ALL",
+                                        clearable=False,
+                                        placeholder="All Products",
+                                        style={"fontSize": "14px"},
+                                    ),
+                                ],
+                                md=2,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("SKU"),
+                                    dcc.Dropdown(
+                                        id="pb-dd-sku",
+                                        options=[{"label": "All SKUs", "value": "ALL"}],
+                                        value="ALL",
+                                        clearable=False,
+                                        placeholder="All SKUs",
+                                        style={"fontSize": "14px"},
+                                    ),
+                                ],
+                                md=2,
                             ),
                             dbc.Col(
                                 [
@@ -68,7 +96,7 @@ def layout() -> html.Div:
                                         marks={1: "1w", 2: "2w", 3: "3w", 4: "4w"},
                                     ),
                                 ],
-                                md=3,
+                                md=2,
                             ),
                             dbc.Col(
                                 [
@@ -80,7 +108,7 @@ def layout() -> html.Div:
                                         marks={0: "Any", 0.5: "0.5x", 1: "1x", 1.5: "1.5x", 2: "2x"},
                                     ),
                                 ],
-                                md=3,
+                                md=2,
                             ),
                             dbc.Col(
                                 dbc.Button(
@@ -90,7 +118,7 @@ def layout() -> html.Div:
                                     size="lg",
                                     className="w-100 mt-4",
                                 ),
-                                md=3,
+                                md=2,
                             ),
                         ],
                     ),
