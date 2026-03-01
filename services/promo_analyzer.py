@@ -102,7 +102,7 @@ def _load_data() -> dict:
     try:
         products_rows  = session.query(Product).all()
         promos_rows    = session.query(Promotion).all()
-        sales_rows     = session.query(Sale).limit(500_000).all()
+        sales_rows     = session.query(Sale).limit(2_000_000).all()
         calendar_rows  = session.query(CalendarEvent).all()
         seas_rows      = session.query(SeasonalityIndex).all()
         stores_rows    = session.query(Store).all()
@@ -196,10 +196,16 @@ def analyze_promotion(
         "physical": 1.00,   # physical is the reference baseline
         "mixed":    1.06,   # blended when both channels are active
     }
+    # Derive channel baseline factors dynamically from the store mix
+    n_physical = len(stores_df[stores_df["channel"] == "physical"]) if not stores_df.empty and "channel" in stores_df.columns else 1
+    n_online   = len(stores_df[stores_df["channel"] == "online"])   if not stores_df.empty and "channel" in stores_df.columns else 0
+    n_total    = max(n_physical + n_online, 1)
+    online_share   = round(max(n_online / n_total, 0.02), 4)   # at least 2%
+    physical_share = round(1.0 - online_share, 4)
     CHANNEL_BASELINE_FACTORS = {
-        "online":   0.08,   # online drives ~8% of total retail volume (1 virtual store)
-        "physical": 0.92,   # physical stores dominate foot-traffic volume
-        "mixed":    1.00,   # combined — use full baseline
+        "online":   online_share,
+        "physical": physical_share,
+        "mixed":    1.00,
     }
 
     channels_set  = set(channels) if channels else {"physical", "online"}
@@ -285,9 +291,9 @@ def analyze_promotion(
     baseline = forecast_result.baseline_weekly * seas_mult
     # Scale baseline to reflect the channel scope (online-only is a fraction of total)
     if ch_mode == "online" and baseline_ch_factor < 1.0:
-        # Online store has 1.8x per-store factor but is 1 store vs 25 physical
-        # baseline_ch_factor captures this proportionality
-        baseline = max(baseline, forecast_result.baseline_weekly / 25 * 1.8)
+        # Online store has a per-store factor relative to physical stores
+        n_phys = max(n_physical, 1)
+        baseline = max(baseline, forecast_result.baseline_weekly / n_phys * 1.8)
 
     # ── 3. Volume lift ────────────────────────────────────────────────────────
     lift_pct = estimate_volume_lift(elasticity_result.elasticity, discount_pct)
@@ -305,10 +311,16 @@ def analyze_promotion(
     )
 
     # ── 5. P&L ────────────────────────────────────────────────────────────────
-    product_info = products_df[products_df["sku_id"] == sku_id].iloc[0] if not products_df.empty else None
-    regular_price = float(product_info["regular_price"]) if product_info is not None else 10.0
-    cost_price    = float(product_info["cost_price"]) if product_info is not None else 5.0
-    product_name  = str(product_info["product_name"]) if product_info is not None else sku_id
+    product_match = products_df[products_df["sku_id"] == sku_id]
+    if not product_match.empty:
+        product_info = product_match.iloc[0]
+        regular_price = float(product_info["regular_price"])
+        cost_price    = float(product_info["cost_price"])
+        product_name  = str(product_info["product_name"])
+    else:
+        regular_price = 10.0
+        cost_price    = 5.0
+        product_name  = sku_id
 
     pnl = calculate_promo_pnl(
         sku_id=sku_id,

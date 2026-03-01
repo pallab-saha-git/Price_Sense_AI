@@ -86,6 +86,11 @@ def _build_context(result: "PromoAnalysisResult") -> dict:
     cannibal_cost    = result.cannibalization.total_margin_loss
     worst_cannibal   = result.cannibalization.worst_affected
 
+    # Get seasonality multiplier from the forecast result
+    target_week = result.start_date.isocalendar()[1]
+    seas_index  = result.forecast.seasonality_index if hasattr(result.forecast, 'seasonality_index') else {}
+    seas_mult   = seas_index.get(int(target_week), 1.0)
+
     return {
         "product":         result.pnl.product_name,
         "sku_id":          result.sku_id,
@@ -103,7 +108,7 @@ def _build_context(result: "PromoAnalysisResult") -> dict:
         "elasticity":      result.elasticity.elasticity,
         "alt_disc":        (result.alt_discount_pct or 0.0) * 100,
         "alt_profit":      result.alt_pnl.net_incremental_profit if result.alt_pnl else 0.0,
-        "seas_mult":       1.0,  # will be populated if seasonality available
+        "seas_mult":       seas_mult,
     }
 
 
@@ -133,6 +138,10 @@ def generate_template_insights(result: "PromoAnalysisResult") -> list[str]:
     # Supplementary: high cannibalization warning
     if has_c and ctx["cannibal_pct"] > 15:
         insights.append(TEMPLATES["high_cannibalization_warning"].format(**ctx))
+
+    # Supplementary: seasonal boost note
+    if ctx["seas_mult"] > 1.3:
+        insights.append(TEMPLATES["seasonal_boost"].format(**ctx))
 
     # Supplementary: low elasticity note
     if abs(result.elasticity.elasticity) < 1.2:

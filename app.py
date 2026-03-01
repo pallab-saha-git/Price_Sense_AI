@@ -38,8 +38,15 @@ import logging
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
 logging.getLogger("prophet").setLevel(logging.WARNING)
 
-# ── Bootstrap database / synthetic data if needed ─────────────────────────────
+# ── Bootstrap database — prefer dunnhumby real data, fall back to synthetic ────
 logger.info("Booting database ...")
+try:
+    # Try loading real dunnhumby data first (from pre-placed zips in data/zip/)
+    from data.load_dunnhumby import load_dunnhumby
+    load_dunnhumby(force=False)
+except Exception as exc:
+    logger.info(f"Dunnhumby load skipped or unavailable: {exc}")
+
 try:
     from data.seed_data import seed_database
     seed_database(force=False)

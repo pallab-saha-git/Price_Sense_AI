@@ -72,7 +72,10 @@ def register(app):
                 df = df[df["category"] == category]
             if product and product != "ALL":
                 df = df[df["subcategory"] == product]
-            df = df.sort_values(["subcategory", "size"])
+            sort_cols = [c for c in ["subcategory"] if c in df.columns]
+            if "size" in df.columns and df["size"].notna().any():
+                sort_cols.append("size")
+            df = df.sort_values(sort_cols) if sort_cols else df
             opts = [{"label": "All SKUs", "value": "ALL"}]
             for _, row in df.iterrows():
                 size_label = ""
@@ -150,7 +153,10 @@ def register(app):
 _CAT_COLORS = {
     "Nuts": "primary", "Beverages": "info", "Snacks": "warning",
     "Grocery": "secondary", "Dairy": "success", "Produce": "success",
-    "Bakery": "danger",
+    "Bakery": "danger", "Frozen": "info", "Meat": "danger",
+    "Deli": "warning", "Seafood": "primary", "Household": "secondary",
+    "Health": "success", "Baby": "warning", "Personal Care": "info",
+    "Floral": "success", "Fuel": "secondary",
 }
 
 

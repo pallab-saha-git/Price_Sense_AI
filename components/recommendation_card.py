@@ -47,7 +47,7 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
     profit_str  = f"${result.pnl.net_incremental_profit:,.0f}"
     profit_col  = "text-success" if result.pnl.net_incremental_profit >= 0 else "text-danger"
     roi_str     = f"{result.pnl.promo_roi:.1f}x"
-    roi_col     = "text-success" if result.pnl.promo_roi >= 1.0 else "text-danger"
+    roi_col     = "text-success" if result.pnl.promo_roi >= 0.0 else "text-danger"
     cannibal    = f"-${result.cannibalization.total_margin_loss:,.0f}" if result.cannibalization.has_cannibalization else "$0"
     risk_str    = f"{result.risk.band}  ({result.risk.total_score:.2f})"
     risk_col    = {"LOW": "text-success", "MEDIUM": "text-warning", "HIGH": "text-danger"}.get(result.risk.band, "")

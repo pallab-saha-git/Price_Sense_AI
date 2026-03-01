@@ -37,7 +37,7 @@ def layout() -> html.Div:
                                     dcc.Dropdown(
                                         id="dd-cmp-product",
                                         options=[],    # populated by callback on page load
-                                        value="NUT-PIST-16",
+                                        value=None,
                                         clearable=False,
                                     ),
                                 ],

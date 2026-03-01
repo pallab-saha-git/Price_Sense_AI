@@ -27,6 +27,10 @@ from loguru import logger
 # Within-subcategory (e.g. Pistachios 16oz ↔ Pistachios 32oz): 0.20–0.30
 # Cross-subcategory same category (Pistachios ↔ Almonds):        0.12–0.20
 # Cross-category (Nuts ↔ Beverages): negligible, not listed here.
+#
+# NOTE: These are only used as a static fallback for synthetic data.
+#       For dunnhumby / real data, dynamic fallback is built at runtime
+#       based on same-category product pairs (see _dynamic_fallback_cross_elasticity).
 FALLBACK_CROSS_ELASTICITIES: dict[tuple[str, str], float] = {
     ("NUT-PIST-16", "NUT-ALMD-16"): 0.22,
     ("NUT-PIST-16", "NUT-MIXD-16"): 0.14,
@@ -43,6 +47,43 @@ FALLBACK_CROSS_ELASTICITIES: dict[tuple[str, str], float] = {
     ("BEV-WTER-06", "BEV-WTER-12"): 0.23,
     ("BEV-WTER-12", "BEV-WTER-06"): 0.20,
 }
+
+
+def _dynamic_fallback_cross_elasticity(focal_sku: str, affected_sku: str, products_df: pd.DataFrame = None) -> float:
+    """
+    Dynamic fallback: if the pair exists in the static table, use that.
+    Otherwise, if both SKUs share the same category, assign a default
+    cross-elasticity based on whether they share a subcategory too.
+
+    This ensures dunnhumby data (DH-xxx, LGSR-xxx) gets plausible
+    fallback values instead of always returning 0.0.
+    """
+    # Try static table first
+    static = FALLBACK_CROSS_ELASTICITIES.get((focal_sku, affected_sku))
+    if static is not None:
+        return static
+
+    # If no products_df provided, return a conservative default
+    if products_df is None or products_df.empty:
+        return 0.12
+
+    focal_info    = products_df[products_df["sku_id"] == focal_sku]
+    affected_info = products_df[products_df["sku_id"] == affected_sku]
+    if focal_info.empty or affected_info.empty:
+        return 0.0
+
+    focal_cat = focal_info.iloc[0]["category"]
+    focal_sub = focal_info.iloc[0]["subcategory"]
+    aff_cat   = affected_info.iloc[0]["category"]
+    aff_sub   = affected_info.iloc[0]["subcategory"]
+
+    if focal_cat != aff_cat:
+        return 0.0  # cross-category: negligible
+
+    if focal_sub == aff_sub:
+        return 0.22  # same subcategory: moderate cannibalization
+
+    return 0.14  # same category, different subcategory: lower cannibalization
 
 
 @dataclass
@@ -75,12 +116,13 @@ def _estimate_cross_elasticity(
     sales_df: pd.DataFrame,
     focal_sku_id: str,
     affected_sku_id: str,
+    products_df: pd.DataFrame = None,
 ) -> float:
     """
     Estimate cross-price elasticity via regression:
       ln(qty_affected) = α + γ·ln(price_focal) + δ·ln(price_affected) + trend + ε
     Returns γ (positive = substitutes, cannibalization).
-    Falls back to lookup table if insufficient data or regression fails.
+    Falls back to dynamic lookup if insufficient data or regression fails.
     """
     focal_df    = sales_df[sales_df["sku_id"] == focal_sku_id][["date", "price_paid", "units_sold"]].copy()
     affected_df = sales_df[sales_df["sku_id"] == affected_sku_id][["date", "price_paid", "units_sold"]].copy()
@@ -92,7 +134,7 @@ def _estimate_cross_elasticity(
     merged = merged[(merged["units_sold_affected"] > 0) & (merged["price_paid_focal"] > 0) & (merged["price_paid_affected"] > 0)]
 
     if len(merged) < 15:
-        return FALLBACK_CROSS_ELASTICITIES.get((focal_sku_id, affected_sku_id), 0.0)
+        return _dynamic_fallback_cross_elasticity(focal_sku_id, affected_sku_id, products_df)
 
     merged["ln_qty_affected"]   = np.log(merged["units_sold_affected"].clip(lower=1))
     merged["ln_price_focal"]    = np.log(merged["price_paid_focal"])
@@ -108,7 +150,7 @@ def _estimate_cross_elasticity(
         # Clamp to plausible range
         return float(np.clip(cross_e, -0.3, 1.5))
     except Exception:
-        return FALLBACK_CROSS_ELASTICITIES.get((focal_sku_id, affected_sku_id), 0.0)
+        return _dynamic_fallback_cross_elasticity(focal_sku_id, affected_sku_id, products_df)
 
 
 def compute_cannibalization(
@@ -162,9 +204,9 @@ def compute_cannibalization(
     impacts = []
     for affected_sku_id in related_skus:
         if use_regression:
-            cross_e = _estimate_cross_elasticity(sales_df, focal_sku_id, affected_sku_id)
+            cross_e = _estimate_cross_elasticity(sales_df, focal_sku_id, affected_sku_id, products_df)
         else:
-            cross_e = FALLBACK_CROSS_ELASTICITIES.get((focal_sku_id, affected_sku_id), 0.0)
+            cross_e = _dynamic_fallback_cross_elasticity(focal_sku_id, affected_sku_id, products_df)
 
         if abs(cross_e) < 0.10:
             continue  # negligible cross-effect — below 10% threshold
