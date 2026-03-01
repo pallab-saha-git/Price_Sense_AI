@@ -24,14 +24,42 @@ def elasticity_chart(result: "ElasticityResult", regular_price: float, baseline_
     """
     Render the price–demand curve for a SKU.
     Shows the expected volume at each discount level.
+    X-axis: price ascending (low → high, left → right).
+    Standard demand curve: downward sloping from left to right.
     """
     from models.elasticity import estimate_volume_lift
 
-    discounts   = np.linspace(0, 0.40, 40)
+    discounts   = np.linspace(0, 0.40, 60)  # finer resolution for smooth curve
     prices      = regular_price * (1 - discounts)
     volumes     = baseline_units * (1 + np.array([estimate_volume_lift(result.elasticity, d) for d in discounts]))
 
+    # Confidence band using CI bounds on elasticity
+    vol_lo = baseline_units * (1 + np.array([estimate_volume_lift(result.conf_int_low,  d) for d in discounts]))
+    vol_hi = baseline_units * (1 + np.array([estimate_volume_lift(result.conf_int_high, d) for d in discounts]))
+    # Ensure lo ≤ hi at each point
+    band_lo = np.minimum(vol_lo, vol_hi)
+    band_hi = np.maximum(vol_lo, vol_hi)
+
+    # Sort by price ascending for clean left→right rendering
+    order   = np.argsort(prices)
+    prices  = prices[order]
+    volumes = volumes[order]
+    band_lo = band_lo[order]
+    band_hi = band_hi[order]
+
     fig = go.Figure()
+
+    # Confidence band (shaded area)
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([prices, prices[::-1]]),
+        y=np.concatenate([band_hi, band_lo[::-1]]),
+        fill="toself",
+        fillcolor="rgba(15,52,96,0.08)",
+        line=dict(width=0),
+        name="95% CI",
+        hoverinfo="skip",
+        showlegend=True,
+    ))
 
     # Demand curve
     fig.add_trace(go.Scatter(
@@ -53,20 +81,21 @@ def elasticity_chart(result: "ElasticityResult", regular_price: float, baseline_
         hovertemplate=f"Regular price: ${regular_price:.2f}<br>Baseline: {baseline_units:,.0f} units<extra></extra>",
     ))
 
-    # Elasticity annotation
+    # Elasticity annotation — placed top-right (away from curve peak)
     fig.add_annotation(
-        x=regular_price * 0.6,
-        y=volumes.max() * 0.85,
-        text=f"Elasticity: {result.elasticity:.2f}<br>R² = {result.r_squared:.2f}",
+        x=regular_price * 0.95,
+        y=volumes.max() * 0.95,
+        text=f"ε = {result.elasticity:.2f}  ·  R² = {result.r_squared:.2f}",
         showarrow=False,
-        bgcolor="rgba(15,52,96,0.1)",
+        bgcolor="rgba(15,52,96,0.08)",
         bordercolor="#0f3460",
         borderwidth=1,
-        font=dict(size=12),
+        font=dict(size=11),
+        xanchor="right",
     )
 
     fig.update_layout(
-        title=dict(text="Price-Demand Elasticity Curve", font=dict(size=13)),
+        title=dict(text="Price–Demand Elasticity Curve", font=dict(size=13)),
         xaxis_title="Price ($)",
         yaxis_title="Projected Weekly Units",
         template=CHART_TEMPLATE,

@@ -151,12 +151,17 @@ def register(app):
 
 
 _CAT_COLORS = {
+    # Synthetic data categories
     "Nuts": "primary", "Beverages": "info", "Snacks": "warning",
     "Grocery": "secondary", "Dairy": "success", "Produce": "success",
     "Bakery": "danger", "Frozen": "info", "Meat": "danger",
     "Deli": "warning", "Seafood": "primary", "Household": "secondary",
     "Health": "success", "Baby": "warning", "Personal Care": "info",
     "Floral": "success", "Fuel": "secondary",
+    # Dunnhumby categories
+    "Kiosk-Gas": "dark", "Misc Sales Tran": "secondary",
+    "Pastry": "warning", "Salad Bar": "success",
+    "Drug Gm": "info", "Meat-Pckgd": "danger",
 }
 
 
@@ -257,5 +262,5 @@ def _promo_history_table(df: pd.DataFrame) -> html.Div:
         defaultColDef={"sortable": True, "filter": True, "resizable": True},
         dashGridOptions={"suppressCellFocus": True, "domLayout": "autoHeight"},
         style={"height": None},
-        className="ag-theme-alpine",
+        className="ag-theme-balham",
     )

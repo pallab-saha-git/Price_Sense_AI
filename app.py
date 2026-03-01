@@ -187,9 +187,10 @@ footer = html.Footer(
 # ── App layout ─────────────────────────────────────────────────────────────────
 app.layout = html.Div(
     [
-        # Auth guard — fires on every client-side URL change and forces a full
-        # page reload to /login when the Flask session has no authenticated user.
-        dcc.Location(id="_url-auth-guard", refresh=True),
+        # Read-only location sensor — tracks URL changes (never triggers reloads)
+        dcc.Location(id="_url-sensor", refresh=False),
+        # Write-only redirect — only used when we need a full-page redirect to /login
+        dcc.Location(id="_url-redirect", refresh=True),
         navbar,
         dbc.Container(
             dash.page_container,
@@ -209,8 +210,8 @@ app.layout = html.Div(
 _PUBLIC_DASH_PATHS = {"/login", "/register", "/logout"}
 
 @app.callback(
-    Output("_url-auth-guard", "href"),
-    Input("_url-auth-guard",  "pathname"),
+    Output("_url-redirect", "href"),
+    Input("_url-sensor",    "pathname"),
 )
 def enforce_auth(pathname):
     if not pathname:

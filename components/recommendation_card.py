@@ -53,14 +53,17 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
     profit_col  = "text-success" if result.pnl.net_incremental_profit >= 0 else "text-danger"
     roi_str     = f"{result.pnl.promo_roi:.1f}x"
     roi_col     = "text-success" if result.pnl.promo_roi >= 0.0 else "text-danger"
-    cannibal    = f"-${result.cannibalization.total_margin_loss:,.0f}" if result.cannibalization.has_cannibalization else "$0"
+    _cannibal_val = result.cannibalization.total_margin_loss if result.cannibalization.has_cannibalization else 0.0
+    cannibal    = f"-${_cannibal_val:,.2f}" if _cannibal_val >= 0.01 else "$0.00"
     risk_str    = f"{result.risk.band}  ({result.risk.total_score:.2f})"
     risk_col    = {"LOW": "text-success", "MEDIUM": "text-warning", "HIGH": "text-danger"}.get(result.risk.band, "")
 
     # Confidence interval on elasticity → volume lift range
+    # Uses constant-elasticity model (same as estimate_volume_lift)
+    from models.elasticity import estimate_volume_lift
     el          = result.elasticity
-    lift_lo     = round(abs(el.conf_int_low)  * result.discount_pct * 100, 0)
-    lift_hi     = round(abs(el.conf_int_high) * result.discount_pct * 100, 0)
+    lift_lo     = round(estimate_volume_lift(el.conf_int_low,  result.discount_pct) * 100, 0)
+    lift_hi     = round(estimate_volume_lift(el.conf_int_high, result.discount_pct) * 100, 0)
     if lift_lo > lift_hi:
         lift_lo, lift_hi = lift_hi, lift_lo
     ci_str      = f"+{lift_lo:.0f}% – +{lift_hi:.0f}%"

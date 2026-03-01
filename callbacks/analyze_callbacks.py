@@ -641,8 +641,14 @@ def _build_discount_analysis_tab(result, sku_id, product_name, regular_price, co
     discount_levels = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
     rows = []
 
+    # Scale cannibalization proportionally to discount depth
+    # (deeper discounts cause more cross-SKU volume diversion)
+    base_cannibal = result.cannibalization.total_margin_loss
+    base_disc     = result.discount_pct if result.discount_pct > 0 else 0.10
+
     for d in discount_levels:
         lift = estimate_volume_lift(result.elasticity.elasticity, d)
+        scaled_cannibal = base_cannibal * (d / base_disc) if base_disc > 0 else 0.0
         pnl  = calculate_promo_pnl(
             sku_id=sku_id,
             product_name=product_name,
@@ -651,7 +657,7 @@ def _build_discount_analysis_tab(result, sku_id, product_name, regular_price, co
             discount_pct=d,
             baseline_weekly_units=baseline_weekly,
             volume_lift_pct=lift,
-            cannibalization_cost=result.cannibalization.total_margin_loss,
+            cannibalization_cost=scaled_cannibal,
         )
         rows.append({
             "label":  f"{int(d*100)}% off",
