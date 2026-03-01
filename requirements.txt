@@ -5,6 +5,7 @@ dash==2.18.*
 dash-bootstrap-components==1.6.*
 dash-ag-grid==31.*
 plotly==5.24.*
+cmdstanpy==1.2.5
 
 # ============================================================
 # SECTION 2: DATA & ML ENGINE

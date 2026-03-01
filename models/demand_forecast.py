@@ -131,6 +131,11 @@ def forecast_baseline(
     if result is not None:
         return result
 
+    # Try simpler ARIMA orders before final MA fallback
+    result = _try_simple_arima(sku_id, weekly, periods, n_weeks)
+    if result is not None:
+        return result
+
     # Final fallback
     baseline_weekly = float(weekly["y"].mean())
     logger.info(f"All models failed for {sku_id} — using MA fallback")
@@ -232,8 +237,18 @@ def _try_sarimax(
     ts = train.set_index("ds")["y"].asfreq("W-SUN")
     # Fill any missing weeks with interpolation
     ts = ts.interpolate(method="linear").bfill().ffill()
+    # If asfreq produced too many NaNs (gaps > interpolation can handle),
+    # fall back to reindex-based approach
     if ts.isna().any() or len(ts) < 4:
-        return None
+        logger.debug(f"SARIMAX freq alignment failed for {sku_id} — trying reindex")
+        try:
+            raw = train.set_index("ds")["y"].sort_index()
+            full_range = pd.date_range(raw.index.min(), raw.index.max(), freq="W-SUN")
+            ts = raw.reindex(full_range).interpolate(method="linear").bfill().ffill()
+            if ts.isna().any() or len(ts) < 4:
+                return None
+        except Exception:
+            return None
 
     baseline_weekly = float(ts.mean())
     seas_idx = _build_seasonality_index(weekly)
@@ -323,9 +338,106 @@ def _try_sarimax_or_ma(
         result.data_quality = data_quality
         return result
 
+    result = _try_simple_arima(sku_id, weekly, periods, n_weeks_used)
+    if result is not None:
+        result.data_quality = data_quality
+        return result
+
     baseline = float(weekly["y"].mean())
     return _ma_forecast(sku_id, baseline, periods, weekly,
                         data_quality=data_quality, n_weeks_used=n_weeks_used)
+
+
+# ── Simple ARIMA fallback ─────────────────────────────────────────────────────
+
+def _try_simple_arima(
+    sku_id: str,
+    weekly: pd.DataFrame,
+    periods: int,
+    n_weeks: int,
+) -> Optional[ForecastResult]:
+    """
+    Try very simple ARIMA orders (0,1,1) and (1,0,0) as intermediate fallback.
+    These require no seasonal component and are more robust on messy data.
+    """
+    if not HAS_SARIMAX:
+        return None
+
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+    holdout_size = min(8, max(1, len(weekly) // 5))
+    train   = weekly.iloc[:-holdout_size] if len(weekly) > holdout_size + 4 else weekly
+    holdout = weekly.tail(holdout_size) if len(weekly) > holdout_size + 4 else pd.DataFrame()
+
+    # Build a clean numeric series (no frequency requirement)
+    ts = train.set_index("ds")["y"].sort_index()
+    # Reindex to a regular weekly grid and interpolate
+    try:
+        full_range = pd.date_range(ts.index.min(), ts.index.max(), freq="W-SUN")
+        ts = ts.reindex(full_range).interpolate(method="linear").bfill().ffill()
+    except Exception:
+        ts = ts.reset_index(drop=True).astype(float)
+
+    if ts.isna().any() or len(ts) < 4:
+        return None
+
+    baseline_weekly = float(ts.mean())
+    seas_idx = _build_seasonality_index(weekly)
+
+    # Try two simple orders
+    for order in [(0, 1, 1), (1, 0, 0)]:
+        try:
+            model = SARIMAX(
+                ts,
+                order=order,
+                seasonal_order=(0, 0, 0, 0),
+                enforce_stationarity=False,
+                enforce_invertibility=False,
+            )
+            fit = model.fit(disp=False, maxiter=200)
+
+            fc = fit.get_forecast(steps=holdout_size + periods)
+            fc_mean = fc.predicted_mean.clip(lower=0)
+            fc_ci   = fc.conf_int(alpha=0.20)
+
+            forecast_df = pd.DataFrame({
+                "ds":          fc_mean.index,
+                "yhat":        fc_mean.values,
+                "yhat_lower":  fc_ci.iloc[:, 0].clip(lower=0).values,
+                "yhat_upper":  fc_ci.iloc[:, 1].values,
+            })
+
+            # MAPE on holdout
+            mape = 20.0
+            if not holdout.empty:
+                holdout_pred = forecast_df.head(holdout_size)
+                if len(holdout_pred) == len(holdout):
+                    actuals   = holdout["y"].values
+                    predicted = holdout_pred["yhat"].values
+                    mask = actuals > 0
+                    if mask.any():
+                        mape = float(np.mean(np.abs((actuals[mask] - predicted[mask]) / actuals[mask])) * 100)
+
+            forecast_future = forecast_df.tail(periods).reset_index(drop=True)
+            model_label = f"arima({order[0]},{order[1]},{order[2]})"
+
+            logger.info(f"Simple ARIMA forecast OK for {sku_id} ({model_label}, MAPE={mape:.1f}%, {n_weeks} weeks)")
+            return ForecastResult(
+                sku_id=sku_id,
+                baseline_weekly=round(baseline_weekly, 1),
+                forecast_df=forecast_future,
+                mape=round(mape, 1),
+                seasonality_index=seas_idx,
+                model_used=model_label,
+                data_quality="good",
+                n_weeks_used=n_weeks,
+            )
+
+        except Exception as exc:
+            logger.debug(f"Simple ARIMA {order} failed for {sku_id}: {exc!r}")
+            continue
+
+    return None
 
 
 # ── Moving Average fallback ───────────────────────────────────────────────────

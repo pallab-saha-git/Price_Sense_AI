@@ -13,6 +13,9 @@ and returns a rich 2-3 paragraph narrative insight.
 
 from __future__ import annotations
 
+import time
+import threading
+from collections import deque
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -26,6 +29,63 @@ from config.settings import (
 
 if TYPE_CHECKING:
     from services.promo_analyzer import PromoAnalysisResult
+
+# ── Rate limiter (token-bucket style) ─────────────────────────────────────────
+# OpenRouter free tier: 8 requests / 60 seconds
+_RATE_LIMIT_MAX_CALLS = 7       # stay 1 under the limit to avoid edge cases
+_RATE_LIMIT_WINDOW    = 60.0    # seconds
+_call_timestamps: deque[float] = deque()
+_rate_lock = threading.Lock()
+
+# ── Circuit breaker ────────────────────────────────────────────────────────────
+# Set to True when a non-retriable billing/auth error is encountered (402/401/403).
+# Once tripped, all AI insight calls short-circuit to templates for the process lifetime.
+_ai_circuit_open = False
+_circuit_lock    = threading.Lock()
+
+# Error codes that indicate a permanent billing/auth failure — no point retrying.
+_FATAL_HTTP_CODES = {401, 402, 403}
+
+
+def _is_fatal_error(exc_str: str) -> bool:
+    """Return True if the error code indicates a permanent failure (billing/auth)."""
+    for code in _FATAL_HTTP_CODES:
+        if f"Error code: {code}" in exc_str or f"'code': {code}" in exc_str:
+            return True
+    return False
+
+
+def _trip_circuit(reason: str) -> None:
+    """Open the circuit breaker and log a clear one-time explanation."""
+    global _ai_circuit_open
+    with _circuit_lock:
+        if not _ai_circuit_open:
+            _ai_circuit_open = True
+            logger.warning(
+                f"AI insights disabled for this session: {reason}. "
+                "All insights will use templates. "
+                "To restore AI insights, fix the API key or increase its spend limit."
+            )
+
+
+def _wait_for_rate_limit() -> None:
+    """Block until we are within the rate-limit window."""
+    with _rate_lock:
+        now = time.monotonic()
+        # Purge timestamps older than the window
+        while _call_timestamps and (now - _call_timestamps[0]) > _RATE_LIMIT_WINDOW:
+            _call_timestamps.popleft()
+        if len(_call_timestamps) >= _RATE_LIMIT_MAX_CALLS:
+            # Must wait until oldest call exits the window
+            sleep_time = _RATE_LIMIT_WINDOW - (now - _call_timestamps[0]) + 0.5
+            if sleep_time > 0:
+                logger.info(f"Rate limiter: sleeping {sleep_time:.1f}s before next AI call")
+                time.sleep(sleep_time)
+                # Re-purge after sleep
+                now = time.monotonic()
+                while _call_timestamps and (now - _call_timestamps[0]) > _RATE_LIMIT_WINDOW:
+                    _call_timestamps.popleft()
+        _call_timestamps.append(time.monotonic())
 
 
 # ── Template bank ─────────────────────────────────────────────────────────────
@@ -165,11 +225,20 @@ def generate_template_insights(result: "PromoAnalysisResult") -> list[str]:
     return insights
 
 
-def generate_ai_insight(result: "PromoAnalysisResult") -> str:
+def generate_ai_insight(result: "PromoAnalysisResult", max_retries: int = 3) -> str:
     """
-    Call OpenRouter API (GPT-4o-mini) to generate a rich NL insight narrative.
-    Falls back to template on any error.
+    Call OpenRouter API to generate a rich NL insight narrative.
+    Includes:
+      - Circuit breaker: instantly falls back to templates if a billing/auth
+        error (402/401/403) has been seen this session.
+      - Rate limiting: respects the free-tier 8 req/min cap.
+      - Exponential-backoff retry: only on transient 429 errors.
+    Falls back to templates on any persistent failure.
     """
+    # ── Circuit breaker check ──────────────────────────────────────────────
+    if _ai_circuit_open:
+        return "\n\n".join(generate_template_insights(result))
+
     try:
         from openai import OpenAI
 
@@ -219,13 +288,46 @@ def generate_ai_insight(result: "PromoAnalysisResult") -> str:
             },
         ]
 
-        response = client.chat.completions.create(
-            model=OPENROUTER_MODEL,
-            messages=messages,
-            max_tokens=400,
-            temperature=0.3,
+        # ── Retry loop ─────────────────────────────────────────────────────
+        last_exc: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                _wait_for_rate_limit()
+                response = client.chat.completions.create(
+                    model=OPENROUTER_MODEL,
+                    messages=messages,
+                    max_tokens=400,
+                    temperature=0.3,
+                )
+                return response.choices[0].message.content.strip()
+
+            except Exception as api_exc:
+                last_exc = api_exc
+                exc_str  = str(api_exc)
+
+                # ── Billing / auth — permanent, trip circuit and stop ─────
+                if _is_fatal_error(exc_str):
+                    _trip_circuit(exc_str[:120])
+                    return "\n\n".join(generate_template_insights(result))
+
+                # ── Rate limit (429) — transient, back off and retry ──────
+                is_rate_limit = "429" in exc_str or "rate" in exc_str.lower()
+                if is_rate_limit and attempt < max_retries - 1:
+                    backoff = (2 ** attempt) * 10  # 10s, 20s, 40s
+                    logger.info(
+                        f"AI insight 429 on attempt {attempt + 1}/{max_retries} — "
+                        f"retrying in {backoff}s"
+                    )
+                    time.sleep(backoff)
+                else:
+                    # Unknown error — don't retry
+                    break
+
+        logger.warning(
+            f"AI insight generation failed after {max_retries} attempts: "
+            f"{last_exc} — falling back to templates"
         )
-        return response.choices[0].message.content.strip()
+        return "\n\n".join(generate_template_insights(result))
 
     except Exception as exc:
         logger.warning(f"AI insight generation failed: {exc} — falling back to templates")
@@ -235,9 +337,10 @@ def generate_ai_insight(result: "PromoAnalysisResult") -> str:
 def generate_insights(result: "PromoAnalysisResult") -> list[str]:
     """
     Main entry point.
-    Uses AI if OPEN_ROUTER_API_KEY is set, otherwise uses templates.
+    Uses AI if OPEN_ROUTER_API_KEY is set and the circuit breaker is closed,
+    otherwise uses templates.
     """
-    if USE_AI_INSIGHTS:
+    if USE_AI_INSIGHTS and not _ai_circuit_open:
         ai_text = generate_ai_insight(result)
         # Return as single item list so caller can render as one block
         return [ai_text]
