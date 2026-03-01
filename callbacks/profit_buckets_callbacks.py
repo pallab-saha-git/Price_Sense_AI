@@ -136,10 +136,11 @@ def register(app):
                 sku_id = prod["sku_id"]
                 rp     = float(prod.get("regular_price", 10.0))
                 cp     = float(prod.get("cost_price",    5.0))
+                cat    = str(prod.get("category", ""))
 
-                # Estimate elasticity
+                # Estimate elasticity (with category fallback for unreliable OLS)
                 try:
-                    el_result = estimate_elasticity(sales_df, sku_id, seas_df)
+                    el_result = estimate_elasticity(sales_df, sku_id, seas_df, category=cat)
                     elasticity = el_result.elasticity
                     # Get per-week baseline from forecast fallback
                     sku_sales  = sales_df[sales_df["sku_id"] == sku_id]
@@ -258,19 +259,24 @@ def _build_results(df: pd.DataFrame, promo_weeks: int) -> html.Div:
         sort_col = col_order[0] if col_order and col_order[0] in pivot.columns else pivot.columns[0]
         pivot = pivot.sort_values(sort_col, ascending=False)
 
+    # Determine colour range — symmetric around zero for a balanced diverging scale
+    abs_max = max(abs(pivot.values.min()), abs(pivot.values.max()), 1)
+
     fig_heat = go.Figure(go.Heatmap(
         z=pivot.values,
         x=pivot.columns.tolist(),
         y=pivot.index.tolist(),
         colorscale=[
             [0.0, "#ef4444"],   # red – big loss
-            [0.4, "#f59e0b"],   # amber – marginal
-            [0.6, "#10b981"],   # green – profitable
+            [0.45, "#fef08a"],  # light yellow – slight loss
+            [0.5, "#fafafa"],   # white – breakeven
+            [0.55, "#bbf7d0"],  # light green – slight profit
             [1.0, "#059669"],   # deep green – highly profitable
         ],
-        zmid=0,
+        zmin=-abs_max,
+        zmax=abs_max,
         colorbar=dict(title="Net Profit ($)", tickformat="$,.0f"),
-        hovertemplate="%{y}<br>%{x}: $%{z:,.0f}<extra></extra>",
+        hovertemplate="%{y}<br>%{x}: $%{z:,.2f}<extra></extra>",
     ))
     fig_heat.update_layout(
         xaxis_title="Discount Depth",

@@ -60,14 +60,39 @@ for _d in [DATA_DIR, RAW_DIR, SYNTHETIC_DIR, PROCESSED_DIR]:
 # ── ML model parameters ───────────────────────────────────────────────────────
 # Constrain elasticity to plausible retail range
 ELASTICITY_MIN: float = -4.0
-ELASTICITY_MAX: float = -0.5
+ELASTICITY_MAX: float = -0.3   # items less elastic than -0.3 are effectively inelastic
+
+# Promotional response multiplier.
+# Academic research (Blattberg, Briesch & Fox 1995) shows that promotional
+# (temporary) price elasticity is 2–3× the regular (permanent) price
+# elasticity due to urgency, display, and reference-price anchoring.
+PROMO_RESPONSE_MULTIPLIER: float = 2.0
+
+# Category-level default elasticities — used when item-level OLS estimation
+# is unreliable (low R², high p-value, or clamped due to no price variation).
+# Values based on typical US grocery benchmarks (Hoch et al. 1995).
+CATEGORY_ELASTICITY_DEFAULTS: dict = {
+    "Grocery":         -1.5,
+    "Beverages":       -2.2,
+    "Produce":         -1.8,
+    "Meat":            -1.3,
+    "Meat-Pckgd":      -1.3,
+    "Drug Gm":         -1.0,
+    "Deli":            -1.4,
+    "Nuts":            -2.0,
+    "Pastry":          -1.6,
+    "Salad Bar":       -1.5,
+    "Kiosk-Gas":       -0.8,
+    "Misc Sales Tran": -0.8,
+}
+DEFAULT_CATEGORY_ELASTICITY: float = -1.5
 
 # Risk thresholds
 RISK_LOW_THRESHOLD: float = 0.3
 RISK_HIGH_THRESHOLD: float = 0.6
 
 # Scenario discount levels to compare
-SCENARIO_DISCOUNTS: list = [0.10, 0.15, 0.20, 0.25, 0.30]
+SCENARIO_DISCOUNTS: list = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
 
 # ── Retail calendar events (hardcoded NRF events) ─────────────────────────────
 RETAIL_EVENTS = {

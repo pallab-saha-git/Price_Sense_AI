@@ -52,6 +52,9 @@ class PromoAnalysisResult:
     segment_summary:      list   = field(default_factory=list)  # per-segment share/response
     seg_multiplier:       float  = 1.0    # weighted promo response multiplier
 
+    # Data quality
+    data_quality:         str    = "good"  # 'good' | 'limited' | 'insufficient'
+
     # Channel/store scope applied
     channels_used:        Optional[list] = None
     store_ids_used:       Optional[list] = None
@@ -266,8 +269,14 @@ def analyze_promotion(
                 ) / total_share
 
     # ── 1. Elasticity ─────────────────────────────────────────────────────────
+    # Look up category for category-level fallback
+    product_cat = None
+    product_match_for_cat = products_df[products_df["sku_id"] == sku_id]
+    if not product_match_for_cat.empty:
+        product_cat = str(product_match_for_cat.iloc[0].get("category", ""))
+
     logger.info(f"Computing elasticity for {sku_id} (channel={ch_mode})")
-    elasticity_result = estimate_elasticity(sales_for_model, sku_id, seas_df)
+    elasticity_result = estimate_elasticity(sales_for_model, sku_id, seas_df, category=product_cat)
 
     # Apply channel-specific elasticity adjustment
     # Online customers are more price-sensitive; physical shoppers less so
@@ -310,7 +319,12 @@ def analyze_promotion(
         use_regression=True,
     )
 
-    # ── 5. P&L ────────────────────────────────────────────────────────────────
+    # ── 5. P&L ────────────────────────────────────────────────────────────────    # Determine overall data quality from sub-models
+    forecast_dq  = getattr(forecast_result, 'data_quality', 'good')
+    elasticity_dq = getattr(elasticity_result, 'data_quality', 'good')
+    quality_scores = {'insufficient': 0, 'limited': 1, 'good': 2}
+    worst_dq = min(quality_scores.get(forecast_dq, 2), quality_scores.get(elasticity_dq, 2))
+    overall_data_quality = {0: 'insufficient', 1: 'limited', 2: 'good'}[worst_dq]
     product_match = products_df[products_df["sku_id"] == sku_id]
     if not product_match.empty:
         product_info = product_match.iloc[0]
@@ -333,6 +347,7 @@ def analyze_promotion(
         promo_weeks=promo_weeks,
         cannibalization_cost=cannibal_result.total_margin_loss,
     )
+    pnl.data_quality = overall_data_quality
 
     # ── 6. Risk ───────────────────────────────────────────────────────────────
     risk_result = score_risk(
@@ -349,7 +364,9 @@ def analyze_promotion(
 
     # ── 7. Recommendation ─────────────────────────────────────────────────────
     recommendation = pnl.recommendation_tier
-    if recommendation == "RECOMMENDED":
+    if recommendation == "INSUFFICIENT_DATA":
+        label = "NOT ENOUGH DATA — cannot reliably assess this promotion"
+    elif recommendation == "RECOMMENDED":
         label = "RECOMMENDED"
     elif recommendation == "MARGINAL":
         label = "MARGINAL — review before running"
@@ -360,7 +377,7 @@ def analyze_promotion(
     alt_discount = None
     alt_pnl_obj  = None
 
-    if recommendation != "RECOMMENDED":
+    if recommendation not in ("RECOMMENDED", "INSUFFICIENT_DATA"):
         # Find the best discount level
         from config.settings import SCENARIO_DISCOUNTS
         cannibal_per_pct = cannibal_result.total_margin_loss / (discount_pct + 1e-9)
@@ -394,6 +411,7 @@ def analyze_promotion(
         alt_pnl=alt_pnl_obj,
         segment_summary=segment_summary,
         seg_multiplier=seg_multiplier,
+        data_quality=overall_data_quality,
         channels_used=channels,
         store_ids_used=store_ids,
     )

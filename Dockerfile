@@ -42,7 +42,8 @@ print('Installed:', installed); \
 RUN touch /usr/local/lib/python3.11/site-packages/prophet/stan_model/cmdstan-2.33.1/makefile \
  && find /usr/local/lib/python3.11/site-packages/prophet/stan_model -type d -exec chmod 755 {} + \
  && find /usr/local/lib/python3.11/site-packages/prophet/stan_model -type f -exec chmod 644 {} + \
- && chmod 755 /usr/local/lib/python3.11/site-packages/prophet/stan_model/cmdstan-2.33.1/bin/*
+ && chmod 755 /usr/local/lib/python3.11/site-packages/prophet/stan_model/cmdstan-2.33.1/bin/* \
+ && chmod 755 /usr/local/lib/python3.11/site-packages/prophet/stan_model/prophet_model.bin
 
 # ── Application code (no .env — see .dockerignore) ───────────────────────────
 COPY . .

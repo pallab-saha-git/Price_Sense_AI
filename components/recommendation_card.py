@@ -16,9 +16,10 @@ if TYPE_CHECKING:
 
 
 _REC_STYLES = {
-    "RECOMMENDED":     ("success", "RECOMMENDED"),
-    "MARGINAL":        ("warning", "MARGINAL"),
-    "NOT_RECOMMENDED": ("danger",  "NOT RECOMMENDED"),
+    "RECOMMENDED":       ("success", "RECOMMENDED"),
+    "MARGINAL":          ("warning", "MARGINAL"),
+    "NOT_RECOMMENDED":   ("danger",  "NOT RECOMMENDED"),
+    "INSUFFICIENT_DATA": ("secondary", "NOT ENOUGH DATA"),
 }
 
 
@@ -41,6 +42,10 @@ def _metric_col(label: str, value: str, sub: str = "", color: str = "text-dark")
 
 def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
     rec_color, rec_label = _REC_STYLES.get(result.recommendation, ("secondary", result.recommendation))
+
+    # ── Insufficient data → show a clear, distinct card ────────────────────────
+    if result.recommendation == "INSUFFICIENT_DATA":
+        return _insufficient_data_card(result, rec_color, rec_label)
 
     # Format metrics
     lift_str    = f"+{result.lift_pct:.0f}%  (+{result.pnl.incremental_units:,.0f} units)"
@@ -102,6 +107,24 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
             style={"fontSize": "14px"},
         )
 
+    # Limited-data warning banner (when data_quality="limited" but not insufficient)
+    data_quality = getattr(result, "data_quality", "good")
+    limited_data_banner = html.Div()
+    if data_quality == "limited":
+        limited_data_banner = dbc.Alert(
+            [
+                html.I(className="fas fa-info-circle me-2"),
+                html.Strong("Limited data: "),
+                "Estimates are based on limited historical data. "
+                "Metrics carry higher uncertainty than usual. "
+                f"({result.elasticity.n_observations} elasticity obs, "
+                f"{getattr(result.forecast, 'n_weeks_used', '?')} forecast weeks)",
+            ],
+            color="info",
+            className="mt-2 mb-0 py-2 px-3",
+            style={"fontSize": "13px"},
+        )
+
     return dbc.Card(
         [
             # Header: recommendation badge
@@ -133,6 +156,7 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
                         "RECOMMENDED": "linear-gradient(135deg, #1a5276, #27ae60)",
                         "MARGINAL":    "linear-gradient(135deg, #7d6608, #f39c12)",
                         "NOT_RECOMMENDED": "linear-gradient(135deg, #7b241c, #e74c3c)",
+                        "INSUFFICIENT_DATA": "linear-gradient(135deg, #4a5568, #718096)",
                     }.get(result.recommendation, "#333"),
                 },
             ),
@@ -156,8 +180,106 @@ def recommendation_card(result: "PromoAnalysisResult") -> dbc.Card:
                         className="g-2",
                     ),
                     alt_block,
+                    limited_data_banner,
                 ]
             ),
+        ],
+        className="shadow mb-3",
+    )
+
+
+def _insufficient_data_card(result: "PromoAnalysisResult", rec_color: str, rec_label: str) -> dbc.Card:
+    """Card displayed when there is not enough historical data for a reliable assessment."""
+    channels_used = result.channels_used or ["physical", "online"]
+    ch_label = " + ".join(c.title() for c in sorted(channels_used))
+    store_ids_used = getattr(result, "store_ids_used", None)
+    if store_ids_used:
+        store_label = f"{len(store_ids_used)} store(s): {', '.join(store_ids_used)}"
+    else:
+        store_label = "All Stores"
+
+    elast_obs = result.elasticity.n_observations
+    forecast_weeks = getattr(result.forecast, "n_weeks_used", 0)
+    model_used = result.forecast.model_used
+
+    details = []
+    if elast_obs < 12:
+        details.append(f"Only {elast_obs} sales observations found for elasticity (need 12+)")
+    if forecast_weeks < 12:
+        details.append(f"Only {forecast_weeks} non-promo weeks available for baseline forecast (need 12+)")
+    if not details:
+        details.append("Insufficient variation in historical prices or sales volume")
+
+    return dbc.Card(
+        [
+            dbc.CardHeader(
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            html.H4(rec_label, className="mb-0 text-white fw-bold"),
+                            width="auto",
+                        ),
+                        dbc.Col(
+                            html.Small(
+                                f"{result.pnl.product_name}  ·  "
+                                f"{result.discount_pct*100:.0f}% off  ·  "
+                                f"{result.start_date} → {result.end_date}",
+                                className="text-white-50",
+                            ),
+                            className="ms-auto align-self-center text-end",
+                        ),
+                    ],
+                    align="center",
+                ),
+                style={"background": "linear-gradient(135deg, #4a5568, #718096)"},
+            ),
+            dbc.CardBody([
+                html.Div(
+                    [
+                        dbc.Badge(f"📍 {store_label}", color="light", text_color="dark", className="me-2"),
+                        dbc.Badge(f"📡 {ch_label}", color="light", text_color="dark"),
+                    ],
+                    className="mb-3",
+                ),
+                dbc.Alert(
+                    [
+                        html.H5([
+                            html.I(className="fas fa-exclamation-triangle me-2"),
+                            "Insufficient Data for Reliable Assessment",
+                        ], className="alert-heading mb-2"),
+                        html.P(
+                            "There is not enough historical sales data for this SKU "
+                            "in the selected channel/store scope to produce reliable "
+                            "promotion metrics. The numbers below are rough estimates only.",
+                            className="mb-2",
+                        ),
+                        html.Ul([html.Li(d) for d in details], className="mb-0"),
+                    ],
+                    color="warning",
+                    className="mb-3",
+                ),
+                html.H6("Rough Estimates (low confidence)", className="text-muted mb-2"),
+                dbc.Row(
+                    [
+                        _metric_col("Baseline",      f"{result.forecast.baseline_weekly:,.0f} u/wk", model_used, "text-muted"),
+                        _metric_col("Est. Lift",      f"+{result.lift_pct:.0f}%",  "very uncertain", "text-muted"),
+                        _metric_col("Elasticity Obs", f"{elast_obs}",              "observations",   "text-muted"),
+                        _metric_col("Forecast Wks",   f"{forecast_weeks}",         "non-promo weeks","text-muted"),
+                    ],
+                    className="g-2",
+                ),
+                html.Hr(),
+                html.P(
+                    [
+                        html.Strong("What to do: "),
+                        "Wait for more sales history to accumulate, broaden the store scope "
+                        "(e.g. include all stores instead of online-only), or check that the "
+                        "selected channel actually has transaction data for this SKU.",
+                    ],
+                    className="text-muted mb-0",
+                    style={"fontSize": "14px"},
+                ),
+            ]),
         ],
         className="shadow mb-3",
     )

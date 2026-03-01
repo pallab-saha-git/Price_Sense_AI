@@ -78,6 +78,14 @@ TEMPLATES = {
         "Discounts will drive less volume lift than typical. Consider a feature + display "
         "promotion over pure price reduction to maintain margin while driving visibility."
     ),
+    "INSUFFICIENT_DATA": (
+        "**Not enough data** to reliably assess this promotion for **{product}**. "
+        "Only {elast_obs} sales observations and {forecast_weeks} non-promo weeks are available "
+        "in the selected scope. Metrics shown are rough estimates with very low confidence. "
+        "To get a reliable assessment, either (a) wait for more sales history, "
+        "(b) broaden the store/channel scope, or (c) confirm this SKU has transaction data "
+        "in the selected channel."
+    ),
 }
 
 
@@ -109,6 +117,9 @@ def _build_context(result: "PromoAnalysisResult") -> dict:
         "alt_disc":        (result.alt_discount_pct or 0.0) * 100,
         "alt_profit":      result.alt_pnl.net_incremental_profit if result.alt_pnl else 0.0,
         "seas_mult":       seas_mult,
+        "elast_obs":       result.elasticity.n_observations,
+        "forecast_weeks":  getattr(result.forecast, 'n_weeks_used', 0),
+        "data_quality":    getattr(result, 'data_quality', 'good'),
     }
 
 
@@ -124,6 +135,10 @@ def generate_template_insights(result: "PromoAnalysisResult") -> list[str]:
     insights: list[str] = []
 
     # Primary recommendation insight
+    if rec == "INSUFFICIENT_DATA":
+        insights.append(TEMPLATES["INSUFFICIENT_DATA"].format(**ctx))
+        return insights  # no supplementary insights for insufficient data
+
     if rec == "RECOMMENDED":
         key = "RECOMMENDED_with_cannibal" if has_c else "RECOMMENDED_no_cannibal"
         insights.append(TEMPLATES[key].format(**ctx))

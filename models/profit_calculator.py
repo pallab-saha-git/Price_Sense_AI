@@ -57,6 +57,7 @@ class PromoPnL:
     promo_weeks:             int = 1
 
     forward_buy_adjustment:  float = 0.0   # post-promo demand dip adjustment
+    data_quality:            str = "good"  # 'good' | 'limited' | 'insufficient'
 
     def __post_init__(self):
         self.promo_price             = round(self.regular_price * (1 - self.discount_pct), 2)
@@ -66,15 +67,15 @@ class PromoPnL:
 
     @property
     def recommendation_tier(self) -> str:
-        """Promotion tier based on net incremental profit and ROI.
+        """Promotion tier based on net incremental profit, ROI, and data quality.
 
-        RECOMMENDED     — positive net incremental profit (lift revenue exceeds margin erosion)
-        MARGINAL        — small loss: ROI between -0.30 and 0 (worth reviewing)
-        NOT_RECOMMENDED — net loss deeper than 30% of discount cost, not worth running
-
-        Note: ROI ≥ 1.0x means the promo DOUBLED its investment — unrealistic for price
-        promotions in CPG retail. Any positive net_incremental_profit is a win.
+        INSUFFICIENT_DATA — not enough historical data to make a reliable assessment
+        RECOMMENDED       — positive net incremental profit (lift revenue exceeds margin erosion)
+        MARGINAL          — small loss: ROI between -0.30 and 0 (worth reviewing)
+        NOT_RECOMMENDED   — net loss deeper than 30% of discount cost, not worth running
         """
+        if self.data_quality == "insufficient":
+            return "INSUFFICIENT_DATA"
         if self.net_incremental_profit > 0:
             return "RECOMMENDED"
         elif self.promo_roi >= -0.30:
@@ -101,7 +102,7 @@ def calculate_promo_pnl(
     volume_lift_pct:       float,       # e.g. 0.42 for +42%
     promo_weeks:           int = 1,
     cannibalization_cost:  float = 0.0,
-    forward_buy_factor:    float = 0.02,  # 2% of incremental attributed to pull-forward
+    forward_buy_factor:    float = 0.0,  # pantry loading adj (default 0 — enable if data supports)
 ) -> PromoPnL:
     """
     Calculate the full promotion P&L.

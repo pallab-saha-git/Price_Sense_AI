@@ -130,7 +130,7 @@ def scenarios_to_dataframe(comparison: ScenarioComparisonResult) -> "pd.DataFram
     import pandas as pd
 
     def _badge(rec: str) -> str:
-        return {"RECOMMENDED": "OK", "MARGINAL": "MARG", "NOT_RECOMMENDED": "NO"}.get(rec, "")
+        return {"RECOMMENDED": "OK", "MARGINAL": "MARG", "NOT_RECOMMENDED": "NO", "INSUFFICIENT_DATA": "N/A"}.get(rec, "")
 
     data = []
     for r in comparison.scenarios:
