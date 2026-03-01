@@ -10,6 +10,9 @@ Computes:
   • Promo ROI
   • Cannibalization-adjusted totals
   • Forward-buy discount (pantry loading adjustment)
+  
+New:
+  • estimate_forward_buy_factor() — analyzes post-promo dips to estimate pantry loading
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 
 @dataclass
@@ -208,3 +212,84 @@ def find_optimal_discount(
             best_discount = disc
 
     return best_discount, best_pnl
+
+
+def estimate_forward_buy_factor(
+    sales_df: pd.DataFrame,
+    sku_id: str,
+    promo_weeks: int = 4,
+) -> float:
+    """
+    Estimate forward-buy (pantry loading) factor by analyzing post-promo dips.
+    
+    Forward-buy occurs when customers stockpile during promotions, causing
+    a demand dip in the weeks following the promotion end.
+    
+    Returns the estimated fraction of incremental volume that is pull-forward
+    (0.0 = no pantry loading, 0.3 = 30% of lift is borrowed from future).
+    
+    Method:
+    1. Identify historical promotions for this SKU
+    2. Measure the post-promo dip (weeks 1-4 after promo end)
+    3. Average the dip magnitude across all past promos
+    4. Return as a fraction of the baseline
+    
+    Parameters
+    ----------
+    sales_df : Sales DataFrame with columns [date, sku_id, units_sold, is_promo]
+    sku_id   : The SKU to analyze
+    promo_weeks : Number of weeks to look after promo for dips
+    
+    Returns
+    -------
+    forward_buy_factor : float in [0.0, 0.5]
+        0.0 = no pantry loading detected
+        0.3 = 30% of incremental volume is borrowed from future periods
+    """
+    sku_sales = sales_df[sales_df["sku_id"] == sku_id].copy()
+    if sku_sales.empty or "is_promo" not in sku_sales.columns:
+        return 0.0
+    
+    sku_sales = sku_sales.sort_values("date")
+    sku_sales["date"] = pd.to_datetime(sku_sales["date"])
+    
+    # Find promo end dates
+    promo_rows = sku_sales[sku_sales["is_promo"] == True]
+    if promo_rows.empty:
+        return 0.0
+    
+    # Group consecutive promo weeks
+    promo_rows["promo_group"] = (promo_rows["date"].diff() > pd.Timedelta(days=8)).cumsum()
+    promo_ends = promo_rows.groupby("promo_group")["date"].max()
+    
+    # Baseline (non-promo weeks' average)
+    baseline = sku_sales[~sku_sales["is_promo"]]["units_sold"].mean()
+    if pd.isna(baseline) or baseline <= 0:
+        return 0.0
+    
+    # Measure post-promo dips
+    dips = []
+    for end_date in promo_ends:
+        post_promo_start = end_date + pd.Timedelta(days=1)
+        post_promo_end   = end_date + pd.Timedelta(weeks=promo_weeks)
+        post_promo_sales = sku_sales[
+            (sku_sales["date"] >= post_promo_start) &
+            (sku_sales["date"] <= post_promo_end) &
+            (~sku_sales["is_promo"])
+        ]
+        
+        if len(post_promo_sales) >= 2:
+            avg_post = post_promo_sales["units_sold"].mean()
+            # Dip is measured as % below baseline
+            dip_pct = (baseline - avg_post) / baseline if baseline > 0 else 0.0
+            if dip_pct > 0:  # Only count actual dips, not increases
+                dips.append(dip_pct)
+    
+    if not dips:
+        return 0.0
+    
+    # Average dip across all promos
+    avg_dip = float(np.mean(dips))
+    
+    # Clamp to [0.0, 0.5] — extreme pantry loading is 50% pull-forward
+    return min(max(avg_dip, 0.0), 0.5)

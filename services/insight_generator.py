@@ -3,12 +3,20 @@ services/insight_generator.py
 ──────────────────────────────
 Generates human-readable insights from PromoAnalysisResult.
 
-Two modes:
+Three modes:
   1. Template-based (default, instant, no API cost)
   2. AI-powered via OpenRouter (when OPEN_ROUTER_API_KEY is set)
+  3. Async AI-powered (non-blocking, returns templates immediately, AI in background)
 
-The AI mode sends the analysis summary to GPT-4o-mini via OpenRouter
-and returns a rich 2-3 paragraph narrative insight.
+The AI mode sends the analysis summary to multiple FREE OpenRouter models with automatic
+fallback if one is rate-limited. It tries models in sequence until one succeeds.
+
+Async Mode:
+- Returns template insights immediately (no blocking)
+- Starts AI generation in background thread
+- UI polls every 3 seconds to check if AI insights are ready
+- Rate limiting and long API calls don't block other analyses
+- Task cache stores results with unique task_id per analysis
 """
 
 from __future__ import annotations
@@ -24,16 +32,21 @@ from config.settings import (
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
     OPENROUTER_MODEL,
+    OPENROUTER_FALLBACK_MODELS,
     USE_AI_INSIGHTS,
+    AI_MAX_RETRIES,
+    AI_UPSTREAM_RATE_LIMIT_COOLDOWN,
+    AI_LOCAL_RATE_LIMIT_MAX_CALLS,
+    AI_LOCAL_RATE_LIMIT_WINDOW,
 )
 
 if TYPE_CHECKING:
     from services.promo_analyzer import PromoAnalysisResult
 
 # ── Rate limiter (token-bucket style) ─────────────────────────────────────────
-# OpenRouter free tier: 8 requests / 60 seconds
-_RATE_LIMIT_MAX_CALLS = 7       # stay 1 under the limit to avoid edge cases
-_RATE_LIMIT_WINDOW    = 60.0    # seconds
+# OpenRouter free tier: 8 requests / 60 seconds (configurable via env vars)
+_RATE_LIMIT_MAX_CALLS = AI_LOCAL_RATE_LIMIT_MAX_CALLS
+_RATE_LIMIT_WINDOW    = AI_LOCAL_RATE_LIMIT_WINDOW
 _call_timestamps: deque[float] = deque()
 _rate_lock = threading.Lock()
 
@@ -43,8 +56,21 @@ _rate_lock = threading.Lock()
 _ai_circuit_open = False
 _circuit_lock    = threading.Lock()
 
+# ── Temporary circuit breaker for upstream rate limits ─────────────────────────
+# When upstream provider is rate-limited (429), temporarily disable AI insights
+# and reopen after a cooldown period to avoid wasting time on repeated failures.
+_upstream_rate_limited = False
+_upstream_rate_limit_until = 0.0  # monotonic time when to reopen
+_UPSTREAM_RATE_LIMIT_COOLDOWN = AI_UPSTREAM_RATE_LIMIT_COOLDOWN
+_upstream_lock = threading.Lock()
+
 # Error codes that indicate a permanent billing/auth failure — no point retrying.
 _FATAL_HTTP_CODES = {401, 402, 403}
+
+# ── Async insight cache ────────────────────────────────────────────────────────
+# Stores async insight tasks: {task_id: {"status": "pending|ready", "insights": [...], "timestamp": float}}
+_async_insight_cache: dict[str, dict] = {}
+_async_cache_lock = threading.Lock()
 
 
 def _is_fatal_error(exc_str: str) -> bool:
@@ -66,6 +92,29 @@ def _trip_circuit(reason: str) -> None:
                 "All insights will use templates. "
                 "To restore AI insights, fix the API key or increase its spend limit."
             )
+
+
+def _trip_upstream_rate_limit() -> None:
+    """Temporarily disable AI insights due to upstream provider rate limiting."""
+    global _upstream_rate_limited, _upstream_rate_limit_until
+    with _upstream_lock:
+        if not _upstream_rate_limited:
+            _upstream_rate_limited = True
+            _upstream_rate_limit_until = time.monotonic() + _UPSTREAM_RATE_LIMIT_COOLDOWN
+            logger.warning(
+                f"Upstream provider rate-limited. AI insights temporarily disabled for "
+                f"{_UPSTREAM_RATE_LIMIT_COOLDOWN:.0f}s. Using templates in the meantime."
+            )
+
+
+def _check_upstream_rate_limit() -> bool:
+    """Check if upstream rate limit cooldown has expired. Returns True if rate-limited."""
+    global _upstream_rate_limited, _upstream_rate_limit_until
+    with _upstream_lock:
+        if _upstream_rate_limited and time.monotonic() >= _upstream_rate_limit_until:
+            _upstream_rate_limited = False
+            logger.info("Upstream rate limit cooldown expired. Re-enabling AI insights.")
+        return _upstream_rate_limited
 
 
 def _wait_for_rate_limit() -> None:
@@ -225,16 +274,92 @@ def generate_template_insights(result: "PromoAnalysisResult") -> list[str]:
     return insights
 
 
-def generate_ai_insight(result: "PromoAnalysisResult", max_retries: int = 3) -> str:
+def _try_model(
+    client, 
+    model_name: str, 
+    messages: list[dict], 
+    result: "PromoAnalysisResult",
+    max_retries: int
+) -> tuple[str | None, bool]:
+    """
+    Try to generate insight using a specific model.
+    Returns: (response_text, should_try_next_model)
+    - If successful: (text, False)
+    - If rate-limited: (None, True) - try next model
+    - If fatal error: (None, False) - stop trying
+    """
+    last_exc: Exception | None = None
+    
+    for attempt in range(max_retries):
+        try:
+            _wait_for_rate_limit()
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_tokens=400,
+                temperature=0.3,
+            )
+            # Success!
+            logger.info(f"✓ AI insight generated successfully using {model_name}")
+            return (response.choices[0].message.content.strip(), False)
+
+        except Exception as api_exc:
+            last_exc = api_exc
+            exc_str = str(api_exc)
+
+            # ── Billing / auth — permanent, stop everything ─────
+            if _is_fatal_error(exc_str):
+                _trip_circuit(exc_str[:120])
+                return (None, False)
+
+            # ── Rate limit (429) — maybe try next model ──────
+            is_rate_limit = "429" in exc_str or "rate" in exc_str.lower()
+            is_upstream_limit = "upstream" in exc_str.lower() or "provider" in exc_str.lower()
+            
+            if is_rate_limit:
+                if is_upstream_limit:
+                    # Upstream provider is rate-limited, try next model immediately
+                    logger.info(f"✗ {model_name} upstream rate-limited, trying next model...")
+                    return (None, True)
+                else:
+                    # Our own rate limit, retry with backoff
+                    if attempt < max_retries - 1:
+                        backoff = (2 ** attempt) * 5  # 5s, 10s, 20s
+                        logger.info(
+                            f"Rate limited on {model_name} attempt {attempt + 1}/{max_retries} — "
+                            f"retrying in {backoff}s"
+                        )
+                        time.sleep(backoff)
+                    else:
+                        # Exhausted retries, try next model
+                        logger.info(f"✗ {model_name} persistently rate-limited, trying next model...")
+                        return (None, True)
+            else:
+                # Unknown error — try next model
+                logger.warning(f"✗ {model_name} failed with: {exc_str[:100]}, trying next model...")
+                return (None, True)
+    
+    # Exhausted all retries
+    return (None, True)
+
+
+def generate_ai_insight(result: "PromoAnalysisResult", max_retries: int = None) -> str:
     """
     Call OpenRouter API to generate a rich NL insight narrative.
+    Uses multiple fallback models for maximum availability.
+    
     Includes:
+      - Multi-model fallback: tries primary model, then fallback models sequentially
       - Circuit breaker: instantly falls back to templates if a billing/auth
         error (402/401/403) has been seen this session.
-      - Rate limiting: respects the free-tier 8 req/min cap.
-      - Exponential-backoff retry: only on transient 429 errors.
-    Falls back to templates on any persistent failure.
+      - Rate limiting: respects the free-tier rate limits
+      - Exponential-backoff retry: for transient errors
+    Falls back to templates on any persistent failure across all models.
     """
+    # Use configured max_retries if not provided
+    if max_retries is None:
+        max_retries = AI_MAX_RETRIES
+    
     # ── Circuit breaker check ──────────────────────────────────────────────
     if _ai_circuit_open:
         return "\n\n".join(generate_template_insights(result))
@@ -288,44 +413,25 @@ def generate_ai_insight(result: "PromoAnalysisResult", max_retries: int = 3) -> 
             },
         ]
 
-        # ── Retry loop ─────────────────────────────────────────────────────
-        last_exc: Exception | None = None
-        for attempt in range(max_retries):
-            try:
-                _wait_for_rate_limit()
-                response = client.chat.completions.create(
-                    model=OPENROUTER_MODEL,
-                    messages=messages,
-                    max_tokens=400,
-                    temperature=0.3,
-                )
-                return response.choices[0].message.content.strip()
-
-            except Exception as api_exc:
-                last_exc = api_exc
-                exc_str  = str(api_exc)
-
-                # ── Billing / auth — permanent, trip circuit and stop ─────
-                if _is_fatal_error(exc_str):
-                    _trip_circuit(exc_str[:120])
-                    return "\n\n".join(generate_template_insights(result))
-
-                # ── Rate limit (429) — transient, back off and retry ──────
-                is_rate_limit = "429" in exc_str or "rate" in exc_str.lower()
-                if is_rate_limit and attempt < max_retries - 1:
-                    backoff = (2 ** attempt) * 10  # 10s, 20s, 40s
-                    logger.info(
-                        f"AI insight 429 on attempt {attempt + 1}/{max_retries} — "
-                        f"retrying in {backoff}s"
-                    )
-                    time.sleep(backoff)
-                else:
-                    # Unknown error — don't retry
-                    break
-
+        # ── Try primary model first, then fallbacks ────────────────────────
+        all_models = [OPENROUTER_MODEL] + OPENROUTER_FALLBACK_MODELS
+        
+        for model in all_models:
+            response_text, should_continue = _try_model(
+                client, model, messages, result, max_retries
+            )
+            
+            if response_text:
+                # Success!
+                return response_text
+            
+            if not should_continue:
+                # Fatal error encountered, stop trying
+                break
+        
+        # All models failed
         logger.warning(
-            f"AI insight generation failed after {max_retries} attempts: "
-            f"{last_exc} — falling back to templates"
+            f"All {len(all_models)} AI models failed or rate-limited — falling back to templates"
         )
         return "\n\n".join(generate_template_insights(result))
 
@@ -334,12 +440,117 @@ def generate_ai_insight(result: "PromoAnalysisResult", max_retries: int = 3) -> 
         return "\n\n".join(generate_template_insights(result))
 
 
+def _generate_ai_insights_async_worker(task_id: str, result: "PromoAnalysisResult") -> None:
+    """
+    Background worker thread that fetches AI insights and updates the cache.
+    This runs independently and doesn't block the main thread.
+    """
+    try:
+        logger.info(f"[Async Task {task_id}] Starting AI insight generation in background...")
+        ai_text = generate_ai_insight(result)
+        
+        with _async_cache_lock:
+            if task_id in _async_insight_cache:
+                _async_insight_cache[task_id]["status"] = "ready"
+                _async_insight_cache[task_id]["insights"] = [ai_text]
+                _async_insight_cache[task_id]["timestamp"] = time.time()
+                logger.info(f"[Async Task {task_id}] ✓ AI insights ready and cached")
+    except Exception as exc:
+        logger.error(f"[Async Task {task_id}] Failed: {exc}")
+        with _async_cache_lock:
+            if task_id in _async_insight_cache:
+                # Keep template insights, mark as failed
+                _async_insight_cache[task_id]["status"] = "failed"
+
+
+def generate_insights_async(result: "PromoAnalysisResult", task_id: str) -> list[str]:
+    """
+    Async version: returns template insights immediately, starts AI generation in background.
+    
+    Args:
+        result: PromoAnalysisResult to generate insights for
+        task_id: Unique identifier for this analysis (e.g., f"{sku_id}_{discount_pct}_{timestamp}")
+    
+    Returns:
+        Template insights immediately. AI insights will be available later via get_async_insights().
+    """
+    # Generate template insights immediately
+    template_insights = generate_template_insights(result)
+    
+    # Initialize cache entry
+    with _async_cache_lock:
+        _async_insight_cache[task_id] = {
+            "status": "pending",
+            "insights": template_insights,
+            "timestamp": time.time(),
+        }
+    
+    # Check if AI insights are even possible
+    should_try_ai = (
+        USE_AI_INSIGHTS 
+        and not _ai_circuit_open 
+        and not _check_upstream_rate_limit()
+    )
+    
+    if should_try_ai:
+        # Start background thread to fetch AI insights
+        thread = threading.Thread(
+            target=_generate_ai_insights_async_worker,
+            args=(task_id, result),
+            daemon=True,
+            name=f"AIInsight-{task_id[:12]}"
+        )
+        thread.start()
+        logger.info(f"[Async Task {task_id}] Template insights returned, AI generation started in background")
+    else:
+        # AI not available, mark as ready with templates only
+        with _async_cache_lock:
+            _async_insight_cache[task_id]["status"] = "ready"
+        logger.info(f"[Async Task {task_id}] AI not available, using templates only")
+    
+    return template_insights
+
+
+def get_async_insights(task_id: str) -> dict | None:
+    """
+    Check if async AI insights are ready for a given task_id.
+    
+    Returns:
+        dict with {"status": "pending|ready|failed", "insights": [...]} or None if task not found
+    """
+    with _async_cache_lock:
+        if task_id in _async_insight_cache:
+            return _async_insight_cache[task_id].copy()
+        return None
+
+
+def cleanup_old_async_tasks(max_age_seconds: float = 3600) -> None:
+    """
+    Remove old completed tasks from the cache to prevent memory leaks.
+    Call periodically or at the start of new analyses.
+    """
+    now = time.time()
+    with _async_cache_lock:
+        to_remove = [
+            tid for tid, data in _async_insight_cache.items()
+            if now - data.get("timestamp", 0) > max_age_seconds
+        ]
+        for tid in to_remove:
+            del _async_insight_cache[tid]
+        if to_remove:
+            logger.debug(f"Cleaned up {len(to_remove)} old async insight tasks")
+
+
 def generate_insights(result: "PromoAnalysisResult") -> list[str]:
     """
     Main entry point.
     Uses AI if OPEN_ROUTER_API_KEY is set and the circuit breaker is closed,
     otherwise uses templates.
     """
+    # Check if upstream rate limit cooldown has expired
+    if _check_upstream_rate_limit():
+        return generate_template_insights(result)
+    
     if USE_AI_INSIGHTS and not _ai_circuit_open:
         ai_text = generate_ai_insight(result)
         # Return as single item list so caller can render as one block

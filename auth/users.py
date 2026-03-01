@@ -7,7 +7,7 @@ Uses Werkzeug's PBKDF2-SHA256 hashing (no extra deps — bundled with Flask).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -55,7 +55,7 @@ def create_user(
             password_hash=generate_password_hash(password),
             role=role,
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         db.add(user)
         db.commit()
@@ -81,7 +81,7 @@ def verify_user(username: str, password: str) -> Optional[dict]:
             return None
 
         # Update last_login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         db.commit()
 
         return {

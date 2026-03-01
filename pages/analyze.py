@@ -22,6 +22,13 @@ def layout() -> html.Div:
             dcc.Store(id="store-analysis-result"),     # stores PromoAnalysisResult as dict
             dcc.Store(id="store-products-data"),       # products DataFrame as JSON
             dcc.Store(id="store-stores-data"),         # stores DataFrame as JSON
+            dcc.Store(id="store-async-task-id"),       # stores current async insight task ID
+            dcc.Interval(
+                id="interval-check-insights",
+                interval=3000,  # Check every 3 seconds
+                n_intervals=0,
+                disabled=True,  # Enabled only when waiting for AI insights
+            ),
 
             dbc.Row(
                 dbc.Col(html.H3("Promotion Analyzer", className="fw-bold mt-3 mb-0"))

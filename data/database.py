@@ -8,7 +8,7 @@ One config line change is the only difference.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
@@ -200,7 +200,7 @@ class User(Base):
     password_hash = Column(String(256), nullable=False)
     role          = Column(String(20), default="viewer")  # 'admin' | 'analyst' | 'viewer'
     is_active     = Column(Boolean, default=True)
-    created_at    = Column(DateTime, default=datetime.utcnow)
+    created_at    = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     last_login    = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:

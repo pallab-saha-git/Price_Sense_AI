@@ -94,35 +94,19 @@ def _load_data() -> dict:
     if _cache:
         return _cache
 
-    from data.database import get_session
-    from data.database import (
-        Product, Store, Sale, Promotion,
-        CalendarEvent, SeasonalityIndex, CompetitorEvent, CustomerSegment,
-    )
-    from sqlalchemy import func
+    from data.database import engine
 
-    session = get_session()
+    logger.info("Loading data into analyzer cache ...")
     try:
-        products_rows  = session.query(Product).all()
-        promos_rows    = session.query(Promotion).all()
-        sales_rows     = session.query(Sale).limit(2_000_000).all()
-        calendar_rows  = session.query(CalendarEvent).all()
-        seas_rows      = session.query(SeasonalityIndex).all()
-        stores_rows    = session.query(Store).all()
-        segments_rows  = session.query(CustomerSegment).all()
-
-        def _to_df(rows, cls):
-            if not rows:
-                return pd.DataFrame()
-            return pd.DataFrame([{c.key: getattr(r, c.key) for c in cls.__table__.columns} for r in rows])
-
-        products_df  = _to_df(products_rows, Product)
-        promos_df    = _to_df(promos_rows,   Promotion)
-        sales_df     = _to_df(sales_rows,    Sale)
-        calendar_df  = _to_df(calendar_rows, CalendarEvent)
-        seas_df      = _to_df(seas_rows,     SeasonalityIndex)
-        stores_df    = _to_df(stores_rows,   Store)
-        segments_df  = _to_df(segments_rows, CustomerSegment)
+        # Use pd.read_sql() directly — 5-10x faster than ORM object iteration
+        products_df  = pd.read_sql("SELECT * FROM products", engine)
+        promos_df    = pd.read_sql("SELECT * FROM promotions", engine)
+        # Limit sales to prevent memory issues (last 2M rows, or use WHERE date > ...)
+        sales_df     = pd.read_sql("SELECT * FROM sales ORDER BY date DESC LIMIT 2000000", engine)
+        calendar_df  = pd.read_sql("SELECT * FROM calendar_events", engine)
+        seas_df      = pd.read_sql("SELECT * FROM seasonality_index", engine)
+        stores_df    = pd.read_sql("SELECT * FROM stores", engine)
+        segments_df  = pd.read_sql("SELECT * FROM customer_segments", engine)
 
         # Type coercions
         if not sales_df.empty:
@@ -145,8 +129,18 @@ def _load_data() -> dict:
         }
         logger.info("Data loaded into analyzer cache (products={}, stores={}, segments={})",
                     len(products_df), len(stores_df), len(segments_df))
-    finally:
-        session.close()
+    except Exception as exc:
+        logger.exception(f"Failed to load data: {exc}")
+        # Return empty cache on failure
+        _cache = {
+            "products":  pd.DataFrame(),
+            "promos":    pd.DataFrame(),
+            "sales":     pd.DataFrame(),
+            "calendar":  pd.DataFrame(),
+            "seas":      pd.DataFrame(),
+            "stores":    pd.DataFrame(),
+            "segments":  pd.DataFrame(),
+        }
 
     return _cache
 

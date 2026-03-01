@@ -29,23 +29,27 @@ def _make_sales_df(n_rows: int = 200, sku_id: str = "NUT-ALMD-16", seed: int = 4
     # True elasticity ≈ -2.0
     units = 100 * (prices / 10.0) ** (-2.0) * rng.lognormal(0, 0.05, n_rows)
     is_promo = rng.random(n_rows) < 0.2
+    # Compute week_number and year from dates
+    week_numbers = [d.isocalendar().week for d in dates]
+    years = [d.year for d in dates]
     return pd.DataFrame({
-        "sale_date":  dates,
+        "date":       dates,
         "sku_id":     sku_id,
-        "actual_price": prices,
-        "regular_price": np.full(n_rows, 10.0),
+        "price_paid": prices,
         "units_sold": units,
         "is_promo":   is_promo,
         "store_id":   "STORE-001",
+        "week_number": week_numbers,
+        "year":       years,
     })
 
 
 def _make_products_df():
     rows = [
         {"sku_id": "NUT-ALMD-16", "product_name": "Almonds 16oz", "category": "Nuts",
-         "regular_price": 10.0, "cost_price": 6.0, "margin_pct": 40.0},
+         "subcategory": "Almonds", "regular_price": 10.0, "cost_price": 6.0, "margin_pct": 40.0},
         {"sku_id": "NUT-PIST-16", "product_name": "Pistachios 16oz", "category": "Nuts",
-         "regular_price": 12.0, "cost_price": 7.5, "margin_pct": 37.5},
+         "subcategory": "Pistachios", "regular_price": 12.0, "cost_price": 7.5, "margin_pct": 37.5},
     ]
     return pd.DataFrame(rows)
 
@@ -67,11 +71,12 @@ class TestElasticity:
         res = estimate_elasticity(sales, "NUT-ALMD-16")
         assert res.r_squared >= 0
 
-    def test_volume_lift_capped_at_80(self):
+    def test_volume_lift_capped_at_max(self):
         from models.elasticity import estimate_volume_lift
-        # Very high discount should not produce > 80% lift
+        from config.settings import MAX_VOLUME_LIFT
+        # Very high discount should not produce lift > MAX_VOLUME_LIFT
         lift = estimate_volume_lift(elasticity=-3.5, discount_pct=0.50)
-        assert lift <= 0.80, f"Lift {lift:.2%} exceeds 80% cap"
+        assert lift <= MAX_VOLUME_LIFT, f"Lift {lift:.2%} exceeds {MAX_VOLUME_LIFT:.0%} cap"
 
     def test_volume_lift_positive_for_discount(self):
         from models.elasticity import estimate_volume_lift
@@ -153,15 +158,16 @@ class TestProfitCalculator:
 
     def test_find_optimal_discount(self):
         from models.profit_calculator import find_optimal_discount
-        opt = find_optimal_discount(
+        opt_discount, opt_pnl = find_optimal_discount(
             sku_id="NUT-ALMD-16",
             product_name="Almonds 16oz",
             regular_price=10.0,
             cost_price=6.0,
             baseline_weekly_units=100.0,
+            elasticity=-2.0,
         )
-        assert opt is not None
-        assert 0.05 <= opt.discount_pct <= 0.40
+        assert opt_discount is not None
+        assert 0.05 <= opt_discount <= 0.40
 
 
 # ── Risk scorer tests ──────────────────────────────────────────────────────────
@@ -217,26 +223,27 @@ class TestScenarioEngine:
         rows = [
             ScenarioRow(
                 discount_pct=0.10,
-                discount_label="10%",
-                volume_lift_pct=0.15,
-                promo_units=115.0,
-                promo_revenue=1035.0,
-                promo_cost=690.0,
-                incremental_profit=35.0,
+                discount_label="10% off",
+                lift_pct=15.0,
+                lift_units=115.0,
+                incremental_revenue=1035.0,
                 net_incremental_profit=35.0,
-                roi=0.05,
-                recommendation="MARGINAL",
-                risk_score=0.4,
+                promo_roi=0.35,
                 risk_band="MEDIUM",
+                risk_score=0.4,
+                cannibalization_cost=10.0,
+                recommendation="MARGINAL",
                 is_optimal=True,
             )
         ]
         comparison = ScenarioComparisonResult(
             sku_id="NUT-ALMD-16",
+            product_name="Almonds 16oz",
             scenarios=rows,
             optimal_discount=0.10,
+            optimal_row=rows[0],
             full_results={},
         )
         df = scenarios_to_dataframe(comparison)
         assert not df.empty
-        assert "discount_label" in df.columns
+        assert "Discount" in df.columns

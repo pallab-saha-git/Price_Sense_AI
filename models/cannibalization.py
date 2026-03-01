@@ -21,6 +21,8 @@ import pandas as pd
 import statsmodels.api as sm
 from loguru import logger
 
+from config.settings import DEFAULT_CROSS_ELASTICITY
+
 # Fallback cross-elasticities (sku_a price cut → sku_b volume drop)
 # Positive = substitutes (cannibalization), Negative = complements (halo)
 # Values calibrated to IRI/Nielsen benchmarks for specialty food categories.
@@ -65,7 +67,7 @@ def _dynamic_fallback_cross_elasticity(focal_sku: str, affected_sku: str, produc
 
     # If no products_df provided, return a conservative default
     if products_df is None or products_df.empty:
-        return 0.12
+        return DEFAULT_CROSS_ELASTICITY
 
     focal_info    = products_df[products_df["sku_id"] == focal_sku]
     affected_info = products_df[products_df["sku_id"] == affected_sku]

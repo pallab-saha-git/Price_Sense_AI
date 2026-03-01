@@ -7,6 +7,7 @@ Triggers the full ML pipeline on form submit and populates the result panels.
 
 from __future__ import annotations
 
+import time
 from datetime import date
 
 import dash_bootstrap_components as dbc
@@ -153,6 +154,8 @@ def register(app):
     @app.callback(
         Output("div-recommendation", "children"),
         Output("div-charts",          "children"),
+        Output("store-async-task-id", "data"),
+        Output("interval-check-insights", "disabled"),
         Input("btn-analyze",  "n_clicks"),
         State("dd-product",        "value"),
         State("sl-discount",       "value"),
@@ -165,7 +168,7 @@ def register(app):
     def run_analysis(n_clicks, sku_id, discount_pct_int, start_date_str, end_date_str, channels, store_id):
         if not n_clicks:
             from components.recommendation_card import empty_recommendation_card
-            return empty_recommendation_card(), html.Div()
+            return empty_recommendation_card(), html.Div(), None, True
 
         # ── Guard: at least one channel must be selected ───────────────────────
         if not channels:
@@ -179,7 +182,7 @@ def register(app):
                 className="mt-2",
             )
             from components.recommendation_card import empty_recommendation_card
-            return empty_recommendation_card(), warn
+            return empty_recommendation_card(), warn, None, True
 
         try:
             discount_pct = discount_pct_int / 100.0
@@ -199,8 +202,15 @@ def register(app):
                 store_ids=store_ids,
             )
 
-            from services.insight_generator import generate_insights
-            insights = generate_insights(result)
+            # Generate insights asynchronously (returns templates immediately, AI in background)
+            from services.insight_generator import generate_insights_async, cleanup_old_async_tasks
+            
+            # Cleanup old tasks to prevent memory leaks
+            cleanup_old_async_tasks()
+            
+            # Create unique task ID for this analysis
+            task_id = f"{sku_id}_{discount_pct_int}_{int(time.time() * 1000)}"
+            insights = generate_insights_async(result, task_id)
 
             # Build UI components
             from components.recommendation_card import recommendation_card
@@ -294,7 +304,8 @@ def register(app):
                 className="mt-3",
             )
 
-            return rec_card, tabs_layout
+            # Enable interval to check for AI insights updates
+            return rec_card, tabs_layout, task_id, False
 
         except Exception as exc:
             logger.exception(f"Analysis failed: {exc}")
@@ -306,7 +317,78 @@ def register(app):
                 ],
                 color="danger",
             )
-            return error_card, html.Div()
+            return error_card, html.Div(), None, True
+
+    # ── Check for async AI insights updates ────────────────────────────────────
+    @app.callback(
+        Output("div-charts", "children", allow_duplicate=True),
+        Output("interval-check-insights", "disabled", allow_duplicate=True),
+        Input("interval-check-insights", "n_intervals"),
+        State("store-async-task-id", "data"),
+        State("div-charts", "children"),
+        prevent_initial_call=True,
+    )
+    def check_async_insights(n_intervals, task_id, current_charts):
+        """Periodically check if async AI insights are ready and update the insight panel."""
+        if not task_id:
+            # No active task, disable interval
+            return current_charts, True
+        
+        from services.insight_generator import get_async_insights
+        from components.insight_panel import insight_panel
+        from dash import no_update
+        
+        # Check if insights are ready
+        insight_data = get_async_insights(task_id)
+        
+        if not insight_data:
+            # Task not found, disable interval
+            return current_charts, True
+        
+        status = insight_data.get("status")
+        
+        if status == "pending":
+            # Still waiting, keep checking
+            return no_update, False
+        
+        elif status in ("ready", "failed"):
+            # Insights are ready or failed, update the panel and disable interval
+            insights = insight_data.get("insights", [])
+            
+            # Find and update the insight panel in the current charts
+            if current_charts and isinstance(current_charts, dict) and current_charts.get("type") == "Tabs":
+                # Extract tabs content
+                tabs_children = current_charts.get("props", {}).get("children", [])
+                
+                if tabs_children and len(tabs_children) > 0:
+                    # Get the first tab (Overview) content
+                    overview_tab = tabs_children[0]
+                    if overview_tab and isinstance(overview_tab, dict):
+                        tab_content = overview_tab.get("props", {}).get("children", {})
+                        
+                        if isinstance(tab_content, dict) and tab_content.get("type") == "Row":
+                            row_children = tab_content.get("props", {}).get("children", [])
+                            
+                            # Find and replace the insight panel (usually the last Col)
+                            for i, col in enumerate(row_children):
+                                if isinstance(col, dict) and col.get("type") == "Col":
+                                    col_children = col.get("props", {}).get("children", {})
+                                    # Check if this is the insight panel (has Card with "AI-Powered Insights" or similar)
+                                    if isinstance(col_children, dict) and col_children.get("type") == "Card":
+                                        card_children = col_children.get("props", {}).get("children", [])
+                                        if card_children and len(card_children) > 0:
+                                            header = card_children[0]
+                                            if isinstance(header, dict) and "Insights" in str(header):
+                                                # Found the insight panel, update it
+                                                row_children[i] = insight_panel(insights)
+                                                logger.info(f"[Async Task {task_id}] Updated insight panel with {'AI' if status == 'ready' else 'template'} insights")
+                                                break
+            
+            # Disable interval since we're done
+            return current_charts, True
+        
+        # Unknown status, disable interval
+        return current_charts, True
 
 
 # ── Helper builders ────────────────────────────────────────────────────────────

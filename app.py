@@ -84,6 +84,7 @@ server = app.server  # expose Flask server for gunicorn / production
 # ── Configure Flask session ────────────────────────────────────────────────────
 server.config["SECRET_KEY"]            = SECRET_KEY
 server.config["SESSION_COOKIE_SECURE"] = not DEBUG          # HTTPS-only in prod
+server.config["SESSION_COOKIE_HTTPONLY"] = True             # Prevent XSS access
 server.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 server.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 
@@ -94,12 +95,56 @@ import auth.login_page  # noqa: F401  (side-effect: registers pages)
 PUBLIC_PATHS = {"/login", "/register", "/_dash-update-component",
                 "/_dash-layout", "/_dash-dependencies", "/_dash-component-suites"}
 
+# ── CSRF protection for Dash callbacks ────────────────────────────────────────
+def _validate_csrf_headers() -> bool:
+    """
+    Validate Origin/Referer headers for AJAX requests to prevent CSRF.
+    Dash uses AJAX POST to /_dash-update-component — must validate origin.
+    """
+    # Skip CSRF check for GET requests and non-callback endpoints
+    if flask.request.method == "GET":
+        return True
+    
+    path = flask.request.path
+    if not path.startswith("/_dash-update-component"):
+        return True  # Only validate Dash callback endpoints
+    
+    # Get expected origin from HOST + PORT
+    expected_host = flask.request.host  # includes port if non-standard
+    
+    # Check Origin header first (preferred for CORS)
+    origin = flask.request.headers.get("Origin")
+    if origin:
+        # Extract hostname from origin (e.g., http://localhost:8050 -> localhost:8050)
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        origin_host = parsed.netloc
+        if origin_host == expected_host:
+            return True
+    
+    # Fallback to Referer header
+    referer = flask.request.headers.get("Referer")
+    if referer:
+        from urllib.parse import urlparse
+        parsed = urlparse(referer)
+        referer_host = parsed.netloc
+        if referer_host == expected_host:
+            return True
+    
+    # If neither header matches, reject
+    logger.warning(f"CSRF validation failed: Origin={origin}, Referer={referer}, Expected={expected_host}")
+    return False
+
 # ── Auth guard — redirects to /login when not authenticated ───────────────────
 @server.before_request
 def require_login():
     path = flask.request.path
     # Allow static assets, public pages, and Dash internals
     if path.startswith(("/_dash", "/assets", "/_reload", "/favicon")):
+        # But validate CSRF for callback endpoints
+        if path.startswith("/_dash-update-component"):
+            if not _validate_csrf_headers():
+                flask.abort(403, "CSRF validation failed")
         return
     if path in PUBLIC_PATHS:
         return

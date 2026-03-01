@@ -59,38 +59,38 @@ def _load_products(session: Session, df: pd.DataFrame):
 
 
 def _load_stores(session: Session, df: pd.DataFrame):
+    # Prepare records for bulk insert
+    records = []
     for _, r in df.iterrows():
-        s = Store(
-            store_id=r["store_id"],
-            store_name=r["store_name"],
-            channel=r["channel"],
-            region=r["region"],
-            state=str(r.get("state", "")),
-            city=str(r.get("city", "")),
-            size_tier=r["size_tier"],
-            avg_weekly_footfall=int(r.get("avg_weekly_footfall", 0)),
-        )
-        session.merge(s)
+        records.append({
+            "store_id": r["store_id"],
+            "store_name": r["store_name"],
+            "channel": r["channel"],
+            "region": r["region"],
+            "state": str(r.get("state", "")),
+            "city": str(r.get("city", "")),
+            "size_tier": r["size_tier"],
+            "avg_weekly_footfall": int(r.get("avg_weekly_footfall", 0)),
+        })
+    # Use bulk_insert_mappings for ~10x speed improvement
+    session.bulk_insert_mappings(Store, records, render_nulls=True)
     session.commit()
     logger.info(f"Loaded {len(df)} stores")
 
 
 def _load_promotions(session: Session, df: pd.DataFrame):
-    for _, r in df.iterrows():
-        p = Promotion(
-            promo_id=r["promo_id"],
-            sku_id=r["sku_id"],
-            start_date=pd.to_datetime(r["start_date"]).date(),
-            end_date=pd.to_datetime(r["end_date"]).date(),
-            discount_pct=float(r["discount_pct"]),
-            promo_type=r.get("promo_type", "TPR"),
-            promo_mechanism=r.get("promo_mechanism", "percent_off"),
-            display_flag=bool(r.get("display_flag", False)),
-            feature_flag=bool(r.get("feature_flag", False)),
-            digital_flag=bool(r.get("digital_flag", False)),
-            funding_type=r.get("funding_type", "self_funded"),
-        )
-        session.merge(p)
+    # Convert dates and prepare records for bulk insert
+    df = df.copy()
+    df["start_date"] = pd.to_datetime(df["start_date"]).dt.date
+    df["end_date"] = pd.to_datetime(df["end_date"]).dt.date
+    # Fill defaults
+    df["promo_type"] = df.get("promo_type", "TPR").fillna("TPR")
+    df["promo_mechanism"] = df.get("promo_mechanism", "percent_off").fillna("percent_off")
+    df["display_flag"] = df.get("display_flag", False).fillna(False).astype(bool)
+    df["feature_flag"] = df.get("feature_flag", False).fillna(False).astype(bool)
+    df["digital_flag"] = df.get("digital_flag", False).fillna(False).astype(bool)
+    df["funding_type"] = df.get("funding_type", "self_funded").fillna("self_funded")
+    session.bulk_insert_mappings(Promotion, df.to_dict("records"), render_nulls=True)
     session.commit()
     logger.info(f"Loaded {len(df)} promotions")
 
@@ -113,15 +113,14 @@ def _load_sales(session: Session, df: pd.DataFrame, chunk_size: int = 5000):
 
 
 def _load_calendar(session: Session, df: pd.DataFrame):
-    for _, r in df.iterrows():
-        e = CalendarEvent(
-            date=pd.to_datetime(r["date"]).date(),
-            event_name=str(r.get("event_name", "")),
-            event_type=str(r.get("event_type", "holiday")),
-            intensity=int(r.get("intensity", 3)),
-            relevant_categories=str(r.get("relevant_categories", '["all"]')),
-        )
-        session.add(e)
+    # Convert dates and prepare records for bulk insert
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["event_name"] = df.get("event_name", "").fillna("").astype(str)
+    df["event_type"] = df.get("event_type", "holiday").fillna("holiday").astype(str)
+    df["intensity"] = df.get("intensity", 3).fillna(3).astype(int)
+    df["relevant_categories"] = df.get("relevant_categories", '["all"]').fillna('["all"]').astype(str)
+    session.bulk_insert_mappings(CalendarEvent, df.to_dict("records"), render_nulls=True)
     session.commit()
     logger.info(f"Loaded {len(df)} calendar events")
 
@@ -133,18 +132,17 @@ def _load_seasonality(session: Session, df: pd.DataFrame):
 
 
 def _load_competitor_events(session: Session, df: pd.DataFrame):
-    for _, r in df.iterrows():
-        ce = CompetitorEvent(
-            date=pd.to_datetime(r["date"]).date(),
-            competitor_name=str(r.get("competitor_name", "")),
-            category=str(r.get("category", "")),
-            product_description=str(r.get("product_description", "")),
-            estimated_discount_pct=float(r.get("estimated_discount_pct", 0)),
-            promo_type=str(r.get("promo_type", "TPR")),
-            source=str(r.get("source", "synthetic")),
-            impact_on_own_sales=float(r.get("impact_on_own_sales", 0)),
-        )
-        session.add(ce)
+    # Convert dates and prepare records for bulk insert
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df["competitor_name"] = df.get("competitor_name", "").fillna("").astype(str)
+    df["category"] = df.get("category", "").fillna("").astype(str)
+    df["product_description"] = df.get("product_description", "").fillna("").astype(str)
+    df["estimated_discount_pct"] = df.get("estimated_discount_pct", 0).fillna(0).astype(float)
+    df["promo_type"] = df.get("promo_type", "TPR").fillna("TPR").astype(str)
+    df["source"] = df.get("source", "synthetic").fillna("synthetic").astype(str)
+    df["impact_on_own_sales"] = df.get("impact_on_own_sales", 0).fillna(0).astype(float)
+    session.bulk_insert_mappings(CompetitorEvent, df.to_dict("records"), render_nulls=True)
     session.commit()
     logger.info(f"Loaded {len(df)} competitor events")
 

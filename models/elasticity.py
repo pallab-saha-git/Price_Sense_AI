@@ -32,6 +32,7 @@ from config.settings import (
     PROMO_RESPONSE_MULTIPLIER,
     CATEGORY_ELASTICITY_DEFAULTS,
     DEFAULT_CATEGORY_ELASTICITY,
+    MAX_VOLUME_LIFT,
 )
 
 
@@ -203,8 +204,8 @@ def estimate_volume_lift(
     # Constant-elasticity demand model
     lift = (1.0 - discount_pct) ** promo_elasticity - 1.0
 
-    # Clamp: lift must be non-negative and capped at 80%
-    return min(max(lift, 0.0), 0.80)
+    # Clamp: lift must be non-negative and capped at MAX_VOLUME_LIFT
+    return min(max(lift, 0.0), MAX_VOLUME_LIFT)
 
 
 def estimate_all_elasticities(
