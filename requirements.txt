@@ -5,7 +5,6 @@ dash==2.18.*
 dash-bootstrap-components==1.6.*
 dash-ag-grid==31.*
 plotly==5.24.*
-cmdstanpy==1.2.5
 
 # ============================================================
 # SECTION 2: DATA & ML ENGINE
@@ -15,7 +14,8 @@ numpy==1.26.*
 statsmodels==0.14.*                     # Includes SARIMAX (statsmodels.tsa.statespace.sarimax)
 scikit-learn==1.5.*
 scipy==1.14.*
-prophet==1.1.*
+prophet==1.1.5
+cmdstanpy==1.2.5
 
 # Seasonality & calendar
 holidays==0.57.*
