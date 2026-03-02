@@ -3,6 +3,10 @@
 > **AI-powered promotion intelligence for mid-market retailers.**  
 > Quantify price elasticity, forecast demand, surface cannibalization risk, and generate AI insights — all in a self-contained Python + Dash web app.
 
+<p align="center">
+  <img src="Preview.gif" alt="Price Sense AI Demo" width="100%">
+</p>
+
 ---
 
 ## Quick Start (local, no Docker)
